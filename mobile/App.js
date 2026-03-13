@@ -1,11 +1,12 @@
 import { StatusBar } from "expo-status-bar";
-import { Text, View } from "react-native";
+import AuthProvider from "./context/AuthContext";
+import AppNavigator from "./app/navigation/AppNavigator";
 
 export default function App() {
   return (
-    <View className="flex-1 items-center justify-center bg-white">
-      <Text className="text-2xl text-blue-500">Hello World</Text>
-      <StatusBar style="auto" />
-    </View>
+    <AuthProvider>
+      <AppNavigator />
+      <StatusBar style="light" />
+    </AuthProvider>
   );
 }
