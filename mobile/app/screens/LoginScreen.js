@@ -81,7 +81,7 @@ export default function LoginScreen() {
       </Animated.View>
 
       <View className="flex-1 items-center justify-center px-6">
-        <View className="mb-48">
+        <View className="mb-10">
           <ProgressRing />
         </View>
 
@@ -90,7 +90,7 @@ export default function LoginScreen() {
         <Text className="text-sm text-secondary mb-1 text-center">
           Build healthy habits.
         </Text>
-        <Text className="text-xs text-muted mb-64 text-center">
+        <Text className="text-xs text-muted mb-10 text-center">
           Track workouts, nutrition, and recovery in one place.
         </Text>
 

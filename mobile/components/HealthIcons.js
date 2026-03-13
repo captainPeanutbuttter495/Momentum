@@ -9,7 +9,7 @@ const ITEMS = [
 
 export default function HealthIcons() {
   return (
-    <View className="flex-row items-center justify-center mb-64" style={{ gap: 32 }}>
+    <View className="flex-row items-center justify-center mb-28" style={{ gap: 32 }}>
       {ITEMS.map((item) => (
         <View key={item.label} className="items-center">
           <MaterialCommunityIcons name={item.icon} size={24} color="#9BA3B5" />
