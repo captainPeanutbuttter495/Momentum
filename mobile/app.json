@@ -1,22 +1,24 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "Momentum",
+    "slug": "momentum",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "scheme": "momentum",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0F1117"
     },
     "ios": {
       "supportsTablet": true
     },
     "android": {
+      "package": "com.momentum.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#1A1D27",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -24,6 +26,15 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "react-native-auth0",
+        {
+          "domain": "dev-4qzuqo344wk2tedt.us.auth0.com",
+          "customScheme": "momentum"
+        }
+      ]
+    ]
   }
 }
