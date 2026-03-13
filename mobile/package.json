@@ -16,14 +16,16 @@
       "./test/setup.js"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|react-native-auth0)"
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|react-native-auth0|expo-linear-gradient)"
     ]
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.0.3",
     "@react-navigation/native": "^7.1.33",
     "@react-navigation/native-stack": "^7.14.5",
     "babel-preset-expo": "^55.0.10",
     "expo": "~54.0.0",
+    "expo-linear-gradient": "~15.0.8",
     "expo-status-bar": "~3.0.9",
     "nativewind": "^2.0.11",
     "react": "19.1.0",
@@ -31,6 +33,7 @@
     "react-native-auth0": "^5.4.0",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
+    "react-native-svg": "15.12.1",
     "tailwindcss": "^3.3.2"
   },
   "private": true,
