@@ -3,7 +3,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useAuth0 } from "react-native-auth0";
 
 import LoginScreen from "../screens/LoginScreen";
-import HomeScreen from "../screens/HomeScreen";
+import ProfileScreen from "../screens/ProfileScreen";
+import MainTabNavigator from "./MainTabNavigator";
 
 const Stack = createNativeStackNavigator();
 
@@ -31,7 +32,10 @@ export default function AppNavigator() {
     <NavigationContainer theme={MomentumTheme}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
-          <Stack.Screen name="Home" component={HomeScreen} />
+          <>
+            <Stack.Screen name="MainTabs" component={MainTabNavigator} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+          </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />
         )}
