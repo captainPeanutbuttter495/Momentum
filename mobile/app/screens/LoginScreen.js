@@ -85,12 +85,12 @@ export default function LoginScreen() {
           <ProgressRing />
         </View>
 
-        <Text className="text-3xl font-bold text-primary mb-1">Momentum</Text>
+        <Text className="text-3xl font-bold text-primary mb-12">Momentum</Text>
 
         <Text className="text-sm text-secondary mb-1 text-center">
           Build healthy habits.
         </Text>
-        <Text className="text-xs text-muted mb-10 text-center">
+        <Text className="text-xs text-muted mb-12 text-center">
           Track workouts, nutrition, and recovery in one place.
         </Text>
 
