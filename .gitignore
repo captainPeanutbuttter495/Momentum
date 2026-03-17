@@ -27,6 +27,12 @@ Thumbs.db
 CLAUDE.md
 .claude/
 
+# MCP config (local dev tooling)
+.mcp.json
+
+# Obsidian vault (requirements docs, not code)
+Momentum/
+
 # IDE
 .vscode/
 .idea/
