@@ -39,7 +39,7 @@ describe("LoginScreen", () => {
 
     await waitFor(() => {
       expect(mockAuthorize).toHaveBeenCalledWith(
-        { scope: "openid profile email" },
+        { scope: "openid profile email", audience: "https://api.momentum.local" },
         { customScheme: "momentum" }
       );
     });
