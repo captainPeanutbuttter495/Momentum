@@ -1,12 +1,13 @@
 import { View, Text, Pressable } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import GradientBackground from "../../components/GradientBackground";
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
 
   return (
-    <View className="flex-1 bg-background">
+    <GradientBackground>
       {/* Header */}
       <View className="flex-row items-center px-4 pt-14 pb-3 border-b border-border">
         <Pressable
@@ -28,6 +29,6 @@ export default function ProfileScreen() {
           This is the profile page
         </Text>
       </View>
-    </View>
+    </GradientBackground>
   );
 }
