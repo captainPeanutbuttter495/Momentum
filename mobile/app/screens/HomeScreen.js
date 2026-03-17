@@ -3,6 +3,7 @@ import { useAuth0 } from "react-native-auth0";
 import { useNavigation } from "@react-navigation/native";
 import { useState } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import GradientBackground from "../../components/GradientBackground";
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -20,7 +21,7 @@ export default function HomeScreen() {
   };
 
   return (
-    <View className="flex-1 bg-background">
+    <GradientBackground>
       {/* Header */}
       <View className="flex-row items-center px-4 pt-14 pb-3 border-b border-border">
         <Pressable
@@ -84,6 +85,6 @@ export default function HomeScreen() {
           </View>
         </Pressable>
       </Modal>
-    </View>
+    </GradientBackground>
   );
 }

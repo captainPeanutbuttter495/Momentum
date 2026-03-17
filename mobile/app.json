@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F1117"
+      "backgroundColor": "#110F1A"
     },
     "ios": {
       "supportsTablet": true
@@ -34,7 +34,8 @@
           "domain": "dev-4qzuqo344wk2tedt.us.auth0.com",
           "customScheme": "momentum"
         }
-      ]
+      ],
+      "expo-web-browser"
     ]
   }
 }

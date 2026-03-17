@@ -38,7 +38,7 @@ export default function LoginScreen() {
     try {
       setLoading(true);
       await authorize(
-        { scope: "openid profile email" },
+        { scope: "openid profile email", audience: "https://api.momentum.local" },
         { customScheme: "momentum" }
       );
     } catch (e) {
@@ -56,7 +56,7 @@ export default function LoginScreen() {
   return (
     <View className="flex-1">
       <LinearGradient
-        colors={["#0F1117", "#161A24", "#1A1D27", "#0F1117"]}
+        colors={["#0D0B14", "#1C1430", "#1A1D27", "#0D0B14"]}
         locations={[0, 0.3, 0.6, 1]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
