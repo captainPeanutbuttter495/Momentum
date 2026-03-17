@@ -1,5 +1,15 @@
 import "@testing-library/jest-native/extend-expect";
 
+jest.mock("react-native-auth0", () => ({
+  useAuth0: () => ({
+    user: { name: "Test User", email: "test@gmail.com" },
+    authorize: jest.fn(),
+    clearSession: jest.fn(),
+    getCredentials: jest.fn().mockResolvedValue({ accessToken: "test-token" }),
+  }),
+  Auth0Provider: ({ children }) => children,
+}));
+
 jest.mock("expo-linear-gradient", () => {
   const { View } = require("react-native");
   return {
@@ -25,6 +35,10 @@ jest.mock("react-native-svg", () => {
     G: mock("G"),
   };
 });
+
+jest.mock("expo-web-browser", () => ({
+  openAuthSessionAsync: jest.fn(),
+}));
 
 jest.mock("@expo/vector-icons", () => {
   const { Text } = require("react-native");
