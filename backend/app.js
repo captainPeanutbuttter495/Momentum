@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import fitbitRoutes from "./routes/fitbit.js";
+import profileRoutes from "./routes/profile.js";
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.get("/api/health", (req, res) => {
 
 // Routes
 app.use("/api/fitbit", fitbitRoutes);
+app.use("/api/profile", profileRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {

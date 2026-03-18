@@ -15,6 +15,30 @@ export function createApiClient(accessToken) {
       }
       return response.json();
     },
+    post: async (path, body) => {
+      const response = await fetch(`${API_URL}${path}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || `Request failed: ${response.status}`);
+      }
+      return response.json();
+    },
+    put: async (path, body) => {
+      const response = await fetch(`${API_URL}${path}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || `Request failed: ${response.status}`);
+      }
+      return response.json();
+    },
     delete: async (path) => {
       const response = await fetch(`${API_URL}${path}`, {
         method: "DELETE",

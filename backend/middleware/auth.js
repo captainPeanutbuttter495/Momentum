@@ -19,7 +19,7 @@ export const checkJwt = expressjwt({
 });
 
 // Middleware to attach user from database to request
-// Auto-creates user on first encounter (Momentum has no profile setup step)
+// Auto-creates a minimal User record on first encounter; full profile is created during onboarding
 export const attachUser = async (req, res, next) => {
   try {
     if (!req.auth?.sub) {
