@@ -23,6 +23,7 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   fitbitToken FitbitToken?
+  profile     UserProfile?
 
   @@map("users")
 }
@@ -41,4 +42,30 @@ model FitbitToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("fitbit_tokens")
+}
+
+model UserProfile {
+  id                 String   @id @default(uuid())
+  userId             String   @unique @map("user_id")
+  goal               String
+  age                Int
+  heightFeet         Int      @map("height_feet")
+  heightInches       Int      @map("height_inches")
+  weightLbs          Float    @map("weight_lbs")
+  gender             String
+  activityLevel      Float    @map("activity_level")
+  targetWeightLbs    Float    @map("target_weight_lbs")
+  weeklyRateLbs      Float    @map("weekly_rate_lbs")
+  bmr                Float
+  tdee               Float
+  dailyCalorieTarget Int      @map("daily_calorie_target")
+  proteinPct         Int      @map("protein_pct")
+  carbPct            Int      @map("carb_pct")
+  fatPct             Int      @map("fat_pct")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
 }
