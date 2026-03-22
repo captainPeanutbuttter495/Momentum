@@ -140,12 +140,40 @@ export async function getFitbitSleepData(userId, date) {
 // Fetch activity data (steps, distance) from Fitbit API for a given date
 export async function getFitbitActivityData(userId, date) {
   const token = await getValidToken(userId);
-  const data = await fitbitFetch(
-    token,
-    `https://api.fitbit.com/1/user/-/activities/date/${date}.json`,
-  );
 
-  const summary = data.summary || {};
+  // Fetch daily summary (steps, distance, calories) and activity log list (workouts) in parallel
+  // Activity Log List API only accepts ONE of afterDate/beforeDate, so use afterDate and filter
+  const [summaryData, logData] = await Promise.all([
+    fitbitFetch(
+      token,
+      `https://api.fitbit.com/1/user/-/activities/date/${date}.json`,
+    ),
+    fitbitFetch(
+      token,
+      `https://api.fitbit.com/1/user/-/activities/list.json?afterDate=${date}&sort=asc&offset=0&limit=10`,
+    ),
+  ]);
+
+  const summary = summaryData.summary || {};
+
+  // Filter log results to only include workouts from the requested date
+  const workoutLogs = (logData.activities || [])
+    .filter((a) => {
+      const logDate = a.startTime
+        ? a.startTime.slice(0, 10)
+        : a.originalStartTime
+          ? a.originalStartTime.slice(0, 10)
+          : null;
+      return logDate === date;
+    })
+    .map((a) => ({
+      name: a.activityName || a.name || "Workout",
+      calories: a.calories || 0,
+      duration: a.activeDuration || a.duration || 0,
+      startTime: a.startTime || null,
+      steps: a.steps || 0,
+    }));
+
   return {
     date,
     steps: summary.steps || 0,
@@ -159,6 +187,7 @@ export async function getFitbitActivityData(userId, date) {
       fairlyActive: summary.fairlyActiveMinutes || 0,
       veryActive: summary.veryActiveMinutes || 0,
     },
+    workouts: workoutLogs,
   };
 }
 
