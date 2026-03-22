@@ -283,6 +283,105 @@ describe("FitbitScreen", () => {
     expect(screen.getByText("Sleep, Activity & Heart Rate")).toBeOnTheScreen();
   });
 
+  // ── Connected State — Activity (Calories & Active Minutes) ────
+
+  it("displays calories burned when connected", async () => {
+    setupConnectedMocks();
+    render(<FitbitScreen />);
+
+    expect(await screen.findByText("2,100")).toBeOnTheScreen();
+    expect(screen.getByText("Calories")).toBeOnTheScreen();
+  });
+
+  it("displays active minutes when connected", async () => {
+    mockGetFitbitStatus.mockResolvedValue({ connected: true });
+    mockGetFitbitSleep.mockResolvedValue(mockSleepData);
+    mockGetFitbitActivity.mockResolvedValue({
+      ...mockActivityData,
+      activeMinutes: {
+        sedentary: 600,
+        lightlyActive: 120,
+        fairlyActive: 25,
+        veryActive: 15,
+      },
+    });
+    mockGetFitbitHeartRate.mockResolvedValue(mockHeartRateData);
+
+    render(<FitbitScreen />);
+
+    // fairlyActive (25) + veryActive (15) = 40
+    expect(await screen.findByText("40")).toBeOnTheScreen();
+    expect(screen.getByText("Active Min")).toBeOnTheScreen();
+  });
+
+  // ── Connected State — Sleep Score & Consistency ──────────────
+
+  it("displays sleep score from efficiency", async () => {
+    setupConnectedMocks();
+    render(<FitbitScreen />);
+
+    expect(await screen.findByText("88")).toBeOnTheScreen();
+    expect(screen.getByText("Sleep Score")).toBeOnTheScreen();
+  });
+
+  it("displays bedtime and wake time", async () => {
+    setupConnectedMocks();
+    render(<FitbitScreen />);
+
+    expect(await screen.findByText("Bedtime")).toBeOnTheScreen();
+    expect(screen.getByText("Wake Time")).toBeOnTheScreen();
+  });
+
+  // ── Connected State — Heart Rate Delta ───────────────────────
+
+  it("shows no change when resting HR is same as yesterday", async () => {
+    setupConnectedMocks();
+    // setupConnectedMocks returns same HR data for both calls
+    render(<FitbitScreen />);
+
+    expect(await screen.findByText("No change from yesterday")).toBeOnTheScreen();
+  });
+
+  it("shows HR increase from yesterday", async () => {
+    mockGetFitbitStatus.mockResolvedValue({ connected: true });
+    mockGetFitbitSleep.mockResolvedValue(mockSleepData);
+    mockGetFitbitActivity.mockResolvedValue(mockActivityData);
+    // First call = current day (HR 65), second call = previous day (HR 62)
+    mockGetFitbitHeartRate
+      .mockResolvedValueOnce({ ...mockHeartRateData, restingHeartRate: 65 })
+      .mockResolvedValueOnce({ ...mockHeartRateData, restingHeartRate: 62 });
+
+    render(<FitbitScreen />);
+
+    expect(await screen.findByText("3 BPM from yesterday")).toBeOnTheScreen();
+    // Up arrow should be rendered (icon mock renders name as text)
+    expect(screen.getByText("arrow-up")).toBeOnTheScreen();
+  });
+
+  it("shows HR decrease from yesterday", async () => {
+    mockGetFitbitStatus.mockResolvedValue({ connected: true });
+    mockGetFitbitSleep.mockResolvedValue(mockSleepData);
+    mockGetFitbitActivity.mockResolvedValue(mockActivityData);
+    // First call = current day (HR 59), second call = previous day (HR 62)
+    mockGetFitbitHeartRate
+      .mockResolvedValueOnce({ ...mockHeartRateData, restingHeartRate: 59 })
+      .mockResolvedValueOnce({ ...mockHeartRateData, restingHeartRate: 62 });
+
+    render(<FitbitScreen />);
+
+    expect(await screen.findByText("3 BPM from yesterday")).toBeOnTheScreen();
+    expect(screen.getByText("arrow-down")).toBeOnTheScreen();
+  });
+
+  // ── Date Navigation — Calendar ───────────────────────────────
+
+  it("shows calendar open button in date selector", async () => {
+    setupConnectedMocks();
+    render(<FitbitScreen />);
+
+    expect(await screen.findByLabelText("Open calendar")).toBeOnTheScreen();
+  });
+
   // ── Error State ────────────────────────────────────────────────
 
   it("shows error when status check fails", async () => {
