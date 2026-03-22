@@ -294,6 +294,39 @@ describe("Fitbit Routes", () => {
 
       expect(res.status).toBe(502);
     });
+
+    it("passes through workouts array when present in activity data", async () => {
+      const activityDataWithWorkouts = {
+        ...mockActivityData,
+        workouts: [
+          { name: "Run", calories: 320, duration: 2700000, startTime: "2026-03-16T07:00:00.000", steps: 4200 },
+          { name: "Weights", calories: 450, duration: 4500000, startTime: "2026-03-16T17:30:00.000", steps: 0 },
+        ],
+      };
+      mockGetFitbitActivityData.mockResolvedValue(activityDataWithWorkouts);
+
+      const res = await request(app).get("/api/fitbit/activity/2026-03-16");
+
+      expect(res.status).toBe(200);
+      expect(res.body.workouts).toHaveLength(2);
+      expect(res.body.workouts[0].name).toBe("Run");
+      expect(res.body.workouts[1].name).toBe("Weights");
+      expect(res.body.steps).toBe(8500);
+    });
+
+    it("passes through empty workouts array when no workouts logged", async () => {
+      const activityDataNoWorkouts = {
+        ...mockActivityData,
+        workouts: [],
+      };
+      mockGetFitbitActivityData.mockResolvedValue(activityDataNoWorkouts);
+
+      const res = await request(app).get("/api/fitbit/activity/2026-03-16");
+
+      expect(res.status).toBe(200);
+      expect(res.body.workouts).toEqual([]);
+      expect(res.body.steps).toBe(8500);
+    });
   });
 
   // ── GET /api/fitbit/heartrate/:date ───────────────────────────
