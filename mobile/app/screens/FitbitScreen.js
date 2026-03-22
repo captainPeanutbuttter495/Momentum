@@ -35,9 +35,47 @@ const ZONE_COLORS = {
   Peak: "#C4555A",
 };
 
+const WORKOUT_ICONS = {
+  run: "run",
+  running: "run",
+  walk: "walk",
+  walking: "walk",
+  hike: "hiking",
+  hiking: "hiking",
+  bike: "bike",
+  biking: "bike",
+  cycling: "bike",
+  "outdoor bike": "bike",
+  swim: "swim",
+  swimming: "swim",
+  weights: "weight-lifter",
+  "weight lifting": "weight-lifter",
+  weightlifting: "weight-lifter",
+  yoga: "meditation",
+  elliptical: "run-fast",
+  treadmill: "run-fast",
+  sport: "trophy-outline",
+  basketball: "basketball",
+  soccer: "soccer",
+  tennis: "tennis",
+};
+
+function getWorkoutIcon(name) {
+  const key = (name || "").toLowerCase();
+  return WORKOUT_ICONS[key] || "lightning-bolt";
+}
+
 function formatMinutes(minutes) {
   const hrs = Math.floor(minutes / 60);
   const mins = minutes % 60;
+  if (hrs === 0) return `${mins}m`;
+  return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+}
+
+function formatDuration(ms) {
+  const totalMinutes = Math.round(ms / 60000);
+  const hrs = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
   if (hrs === 0) return `${mins}m`;
   return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
 }
@@ -318,6 +356,51 @@ export default function FitbitScreen() {
               </View>
             ) : (
               <Text className="text-sm text-muted text-center">No activity data</Text>
+            )}
+          </View>
+
+          {/* ── Workouts Section ── */}
+          <View className="bg-surface rounded-xl p-4 mb-4">
+            <View className="flex-row items-center mb-3">
+              <MaterialCommunityIcons name="dumbbell" size={18} color="#4DA58E" />
+              <Text className="text-sm text-secondary ml-2">Workouts</Text>
+              <View className="ml-auto bg-surface-elevated rounded-full px-2 py-0.5">
+                <Text className="text-xs text-muted">
+                  {activityData?.workouts?.length || 0}
+                </Text>
+              </View>
+            </View>
+            {activityData?.workouts?.length > 0 ? (
+              activityData.workouts.map((workout, index) => (
+                <View
+                  key={index}
+                  className="bg-surface-elevated rounded-lg p-3 mb-2"
+                >
+                  <View className="flex-row items-center">
+                    <MaterialCommunityIcons
+                      name={getWorkoutIcon(workout.name)}
+                      size={18}
+                      color="#4DA58E"
+                    />
+                    <Text className="text-sm text-primary font-medium ml-2">
+                      {workout.name}
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center mt-1 ml-7">
+                    <Text className="text-xs text-muted">
+                      {formatDuration(workout.duration)}
+                    </Text>
+                    <Text className="text-xs text-muted mx-2">·</Text>
+                    <Text className="text-xs text-muted">
+                      {workout.calories} cal
+                    </Text>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <Text className="text-sm text-muted text-center">
+                No workouts for today
+              </Text>
             )}
           </View>
 

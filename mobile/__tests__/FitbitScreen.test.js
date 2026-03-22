@@ -140,6 +140,52 @@ describe("FitbitScreen", () => {
     expect(await screen.findByText("No activity data")).toBeOnTheScreen();
   });
 
+  // ── Connected State — Workouts ────────────────────────────────
+
+  it("displays workouts with names and details when present", async () => {
+    mockGetFitbitStatus.mockResolvedValue({ connected: true });
+    mockGetFitbitSleep.mockResolvedValue(mockSleepData);
+    mockGetFitbitActivity.mockResolvedValue({
+      ...mockActivityData,
+      workouts: [
+        { name: "Run", calories: 320, duration: 2700000, startTime: "2026-03-16T07:00:00.000", steps: 4200 },
+        { name: "Weights", calories: 450, duration: 4500000, startTime: "2026-03-16T17:30:00.000", steps: 0 },
+      ],
+    });
+    mockGetFitbitHeartRate.mockResolvedValue(mockHeartRateData);
+
+    render(<FitbitScreen />);
+
+    expect(await screen.findByText("Workouts")).toBeOnTheScreen();
+    expect(screen.getByText("Run")).toBeOnTheScreen();
+    expect(screen.getByText("Weights")).toBeOnTheScreen();
+    expect(screen.getByText("320 cal")).toBeOnTheScreen();
+    expect(screen.getByText("450 cal")).toBeOnTheScreen();
+    expect(screen.getByText("45m")).toBeOnTheScreen();
+    expect(screen.getByText("1h 15m")).toBeOnTheScreen();
+  });
+
+  it("shows 'No workouts for today' when workouts array is empty", async () => {
+    mockGetFitbitStatus.mockResolvedValue({ connected: true });
+    mockGetFitbitSleep.mockResolvedValue(mockSleepData);
+    mockGetFitbitActivity.mockResolvedValue({
+      ...mockActivityData,
+      workouts: [],
+    });
+    mockGetFitbitHeartRate.mockResolvedValue(mockHeartRateData);
+
+    render(<FitbitScreen />);
+
+    expect(await screen.findByText("No workouts for today")).toBeOnTheScreen();
+  });
+
+  it("shows 'No workouts for today' when workouts field is missing", async () => {
+    setupConnectedMocks();
+    render(<FitbitScreen />);
+
+    expect(await screen.findByText("No workouts for today")).toBeOnTheScreen();
+  });
+
   // ── Connected State — Heart Rate ───────────────────────────────
 
   it("displays resting heart rate", async () => {
