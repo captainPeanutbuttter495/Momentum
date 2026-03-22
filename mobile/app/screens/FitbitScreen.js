@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import GradientBackground from "../../components/GradientBackground";
+import CalendarPicker from "../../components/CalendarPicker";
 import { createApiClient } from "../../services/api";
 import {
   getFitbitAuthUrl,
@@ -108,8 +109,10 @@ export default function FitbitScreen() {
   const [sleepData, setSleepData] = useState(null);
   const [activityData, setActivityData] = useState(null);
   const [heartRateData, setHeartRateData] = useState(null);
+  const [prevRestingHR, setPrevRestingHR] = useState(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(getTodayDate());
+  const [calendarVisible, setCalendarVisible] = useState(false);
   const [error, setError] = useState(null);
 
   const getApi = useCallback(async () => {
@@ -138,15 +141,22 @@ export default function FitbitScreen() {
         setError(null);
         const api = await getApi();
 
-        const [sleep, activity, heartRate] = await Promise.allSettled([
+        const prevDate = shiftDate(date, -1);
+        const [sleep, activity, heartRate, prevHeartRate] = await Promise.allSettled([
           getFitbitSleep(api, date),
           getFitbitActivity(api, date),
           getFitbitHeartRate(api, date),
+          getFitbitHeartRate(api, prevDate),
         ]);
 
         setSleepData(sleep.status === "fulfilled" ? sleep.value : null);
         setActivityData(activity.status === "fulfilled" ? activity.value : null);
         setHeartRateData(heartRate.status === "fulfilled" ? heartRate.value : null);
+        setPrevRestingHR(
+          prevHeartRate.status === "fulfilled"
+            ? prevHeartRate.value?.restingHeartRate || null
+            : null,
+        );
 
         if (sleep.status === "rejected" && sleep.reason?.message === "Fitbit not connected") {
           setConnected(false);
@@ -295,9 +305,18 @@ export default function FitbitScreen() {
             color="#9BA3B5"
           />
         </Pressable>
-        <Text className="text-base text-primary font-medium">
-          {formatDisplayDate(selectedDate)}
-        </Text>
+        <Pressable
+          onPress={() => setCalendarVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Open calendar"
+          className="flex-row items-center"
+          style={{ gap: 6 }}
+        >
+          <Text className="text-base text-primary font-medium">
+            {formatDisplayDate(selectedDate)}
+          </Text>
+          <MaterialCommunityIcons name="calendar" size={16} color="#9BA3B5" />
+        </Pressable>
         <Pressable
           onPress={() => handleDateChange(1)}
           disabled={selectedDate >= getTodayDate()}
@@ -340,20 +359,36 @@ export default function FitbitScreen() {
               <Text className="text-sm text-secondary ml-2">Activity</Text>
             </View>
             {activityData ? (
-              <View className="flex-row justify-around">
-                <View className="items-center">
-                  <Text className="text-2xl font-bold text-primary">
-                    {activityData.steps.toLocaleString()}
-                  </Text>
-                  <Text className="text-xs text-muted mt-1">Steps</Text>
+              <>
+                <View className="flex-row justify-around mb-3">
+                  <View className="items-center">
+                    <Text className="text-2xl font-bold text-primary">
+                      {activityData.steps.toLocaleString()}
+                    </Text>
+                    <Text className="text-xs text-muted mt-1">Steps</Text>
+                  </View>
+                  <View className="items-center">
+                    <Text className="text-2xl font-bold text-primary">
+                      {activityData.distance.toFixed(1)}
+                    </Text>
+                    <Text className="text-xs text-muted mt-1">Miles</Text>
+                  </View>
                 </View>
-                <View className="items-center">
-                  <Text className="text-2xl font-bold text-primary">
-                    {activityData.distance.toFixed(1)}
-                  </Text>
-                  <Text className="text-xs text-muted mt-1">Miles</Text>
+                <View className="flex-row justify-around border-t border-border pt-3">
+                  <View className="items-center">
+                    <Text className="text-2xl font-bold text-primary">
+                      {activityData.caloriesOut?.toLocaleString() || "0"}
+                    </Text>
+                    <Text className="text-xs text-muted mt-1">Calories</Text>
+                  </View>
+                  <View className="items-center">
+                    <Text className="text-2xl font-bold text-primary">
+                      {(activityData.activeMinutes?.fairlyActive || 0) + (activityData.activeMinutes?.veryActive || 0)}
+                    </Text>
+                    <Text className="text-xs text-muted mt-1">Active Min</Text>
+                  </View>
                 </View>
-              </View>
+              </>
             ) : (
               <Text className="text-sm text-muted text-center">No activity data</Text>
             )}
@@ -418,6 +453,32 @@ export default function FitbitScreen() {
                       {heartRateData.restingHeartRate}
                     </Text>
                     <Text className="text-xs text-muted mt-1">Resting BPM</Text>
+                    {prevRestingHR != null && (
+                      (() => {
+                        const delta = heartRateData.restingHeartRate - prevRestingHR;
+                        if (delta === 0) return (
+                          <View className="flex-row items-center mt-2">
+                            <MaterialCommunityIcons name="minus" size={14} color="#9BA3B5" />
+                            <Text className="text-xs text-secondary ml-1">No change from yesterday</Text>
+                          </View>
+                        );
+                        const isUp = delta > 0;
+                        return (
+                          <View className="flex-row items-center mt-2">
+                            <MaterialCommunityIcons
+                              name={isUp ? "arrow-up" : "arrow-down"}
+                              size={14}
+                              color={isUp ? "#C4555A" : "#4DA58E"}
+                            />
+                            <Text
+                              className={`text-xs ml-1 ${isUp ? "text-error" : "text-accent"}`}
+                            >
+                              {Math.abs(delta)} BPM from yesterday
+                            </Text>
+                          </View>
+                        );
+                      })()
+                    )}
                   </View>
                 )}
                 {heartRateData.zones
@@ -479,7 +540,18 @@ export default function FitbitScreen() {
                   <MaterialCommunityIcons name="sleep" size={18} color="#5B6ABF" />
                   <Text className="text-sm text-secondary ml-2">Sleep</Text>
                 </View>
-                <View className="flex-row justify-around">
+
+                {/* Sleep Score */}
+                {sleepData.sleepLog[0].efficiency != null && (
+                  <View className="items-center mb-4">
+                    <Text className="text-3xl font-bold text-primary">
+                      {sleepData.sleepLog[0].efficiency}
+                    </Text>
+                    <Text className="text-xs text-muted mt-1">Sleep Score</Text>
+                  </View>
+                )}
+
+                <View className="flex-row justify-around mb-4">
                   <View className="items-center">
                     <Text className="text-2xl font-bold text-primary">
                       {formatMinutes(sleepData.summary.totalMinutesAsleep)}
@@ -491,6 +563,36 @@ export default function FitbitScreen() {
                       {formatMinutes(sleepData.summary.totalTimeInBed)}
                     </Text>
                     <Text className="text-xs text-muted mt-1">In Bed</Text>
+                  </View>
+                </View>
+
+                {/* Bedtime / Wake Time */}
+                <View className="border-t border-border pt-3">
+                  <View className="flex-row justify-around">
+                    <View className="flex-row items-center">
+                      <MaterialCommunityIcons name="weather-night" size={16} color="#5B6ABF" />
+                      <View className="ml-2">
+                        <Text className="text-sm font-medium text-primary">
+                          {new Date(sleepData.sleepLog[0].startTime).toLocaleTimeString("en-US", {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </Text>
+                        <Text className="text-xs text-muted">Bedtime</Text>
+                      </View>
+                    </View>
+                    <View className="flex-row items-center">
+                      <MaterialCommunityIcons name="weather-sunny" size={16} color="#C4945A" />
+                      <View className="ml-2">
+                        <Text className="text-sm font-medium text-primary">
+                          {new Date(sleepData.sleepLog[0].endTime).toLocaleTimeString("en-US", {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </Text>
+                        <Text className="text-xs text-muted">Wake Time</Text>
+                      </View>
+                    </View>
                   </View>
                 </View>
               </View>
@@ -660,6 +762,15 @@ export default function FitbitScreen() {
             <Text className="text-sm text-error">Disconnect Fitbit</Text>
           </Pressable>
         </ScrollView>
+      )}
+
+      {calendarVisible && (
+        <CalendarPicker
+          visible={calendarVisible}
+          selectedDate={selectedDate}
+          onSelectDate={(date) => setSelectedDate(date)}
+          onClose={() => setCalendarVisible(false)}
+        />
       )}
     </GradientBackground>
   );
