@@ -1,14 +1,17 @@
-import { View, Text, Pressable, Modal } from "react-native";
+import { View, Text, Pressable, Modal, ScrollView, ActivityIndicator } from "react-native";
 import { useAuth0 } from "react-native-auth0";
 import { useNavigation } from "@react-navigation/native";
 import { useState } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import GradientBackground from "../../components/GradientBackground";
+import CoachCard from "../../components/CoachCard";
+import useCoachInsight from "../../hooks/useCoachInsight";
 
 export default function HomeScreen() {
   const navigation = useNavigation();
   const { user, clearSession } = useAuth0();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { insights, isLoading, isRecapLoading, error, isConnected, refetch, fetchRecap } = useCoachInsight();
 
   const handleLogout = async () => {
     setMenuOpen(false);
@@ -38,11 +41,69 @@ export default function HomeScreen() {
       </View>
 
       {/* Content */}
-      <View className="flex-1 px-6 pt-6">
-        <Text className="text-2xl font-bold text-primary">
-          Welcome, {user?.name || "User"}
-        </Text>
-      </View>
+      <ScrollView className="flex-1">
+        <View className="px-6 pt-6">
+          <Text className="text-2xl font-bold text-primary">
+            Welcome, {user?.name || "User"}
+          </Text>
+        </View>
+
+        {/* Insight states */}
+        {isLoading && (
+          <View className="items-center mt-8">
+            <ActivityIndicator size="large" color="#4DA58E" />
+            <Text className="text-sm text-secondary mt-3">Checking in with your coach...</Text>
+          </View>
+        )}
+
+        {!isLoading && error && (
+          <View className="bg-surface rounded-xl p-5 mx-6 mt-4 items-center">
+            <MaterialCommunityIcons name="alert-circle-outline" size={28} color="#C4555A" />
+            <Text className="text-sm text-secondary mt-2 text-center">{error}</Text>
+            <Pressable
+              onPress={refetch}
+              accessibilityRole="button"
+              accessibilityLabel="Retry"
+              className="bg-accent rounded-lg px-4 py-2 mt-3"
+            >
+              <Text className="text-sm font-semibold text-primary">Retry</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {!isLoading && !error && !isConnected && (
+          <View className="bg-surface rounded-xl p-5 mx-6 mt-4 items-center">
+            <MaterialCommunityIcons name="watch" size={32} color="#5C6379" />
+            <Text className="text-base font-semibold text-primary mt-3">
+              Connect your Fitbit
+            </Text>
+            <Text className="text-sm text-secondary mt-1 text-center">
+              Link your Fitbit to unlock daily insights and personalized guidance.
+            </Text>
+            <Pressable
+              onPress={() => navigation.navigate("Fitbit")}
+              accessibilityRole="button"
+              accessibilityLabel="Go to Fitbit"
+              className="bg-accent rounded-lg px-5 py-2.5 mt-4"
+            >
+              <Text className="text-sm font-semibold text-primary">Get Started</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {!isLoading && !error && isConnected && insights && (
+          <CoachCard insights={insights} onRecap={fetchRecap} isRecapLoading={isRecapLoading} />
+        )}
+
+        {!isLoading && !error && isConnected && !insights && (
+          <View className="bg-surface rounded-xl p-5 mx-6 mt-4 items-center">
+            <MaterialCommunityIcons name="clock-outline" size={28} color="#5C6379" />
+            <Text className="text-sm text-secondary mt-2 text-center">
+              No data yet today. Wear your Fitbit and check back later.
+            </Text>
+          </View>
+        )}
+      </ScrollView>
 
       {/* Hamburger Menu */}
       <Modal
