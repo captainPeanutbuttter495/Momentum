@@ -63,7 +63,8 @@ Rules:
 - Never repeat the same idea in different words
 - Never mention calorie intake or diet
 - Prioritize clarity over detail
-- Tone: supportive, practical, brief`;
+- Tone: supportive, practical, brief
+- If you see the same exercise at the same weight/reps for 2+ recent sessions, gently suggest increasing weight (2.5–5 lbs) or adding 1–2 reps per set`;
 }
 
 function formatMinutes(totalMin) {
@@ -84,7 +85,7 @@ function formatTime(isoString) {
   }
 }
 
-export function buildUserMessage({ context, date, sleep, activity, heartRate }) {
+export function buildUserMessage({ context, date, sleep, activity, heartRate, workoutLogs, recentWorkouts }) {
   const parts = [];
 
   parts.push(`Here's my data for ${date}:\n`);
@@ -142,6 +143,27 @@ export function buildUserMessage({ context, date, sleep, activity, heartRate }) 
     }
   }
 
+  // Manual exercise detail (from user-logged workouts)
+  if (workoutLogs?.length > 0) {
+    parts.push("\nManual exercise detail:");
+    for (const log of workoutLogs) {
+      for (const ex of log.exercises || []) {
+        parts.push(`- ${ex.name}: ${ex.weightLbs} lbs × ${ex.sets} sets × ${ex.reps} reps`);
+      }
+    }
+  }
+
+  // Recent workout history for progressive overload analysis
+  if (recentWorkouts?.length > 0) {
+    parts.push("\nRecent workout history (last 2 weeks):");
+    for (const log of recentWorkouts) {
+      const exercises = (log.exercises || [])
+        .map((ex) => `${ex.name} ${ex.weightLbs}lbs×${ex.sets}×${ex.reps}`)
+        .join(", ");
+      parts.push(`- ${log.date}: ${exercises}`);
+    }
+  }
+
   // Closing question
   if (context === "morning") {
     parts.push("\nWhat should I do for my workout today?");
@@ -152,9 +174,9 @@ export function buildUserMessage({ context, date, sleep, activity, heartRate }) 
   return parts.join("\n");
 }
 
-export async function getCoachInsight({ context, date, profile, sleep, activity, heartRate, userName }) {
+export async function getCoachInsight({ context, date, profile, sleep, activity, heartRate, userName, workoutLogs, recentWorkouts }) {
   const systemPrompt = buildSystemPrompt(profile, userName);
-  const userMessage = buildUserMessage({ context, date, sleep, activity, heartRate });
+  const userMessage = buildUserMessage({ context, date, sleep, activity, heartRate, workoutLogs, recentWorkouts });
 
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
