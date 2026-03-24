@@ -5,6 +5,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import GradientBackground from "../../components/GradientBackground";
 import CalendarPicker from "../../components/CalendarPicker";
+import WorkoutLogModal from "../../components/WorkoutLogModal";
 import { createApiClient } from "../../services/api";
 import {
   getFitbitAuthUrl,
@@ -14,6 +15,12 @@ import {
   getFitbitHeartRate,
   disconnectFitbit,
 } from "../../services/fitbit";
+import {
+  getTemplates,
+  getWorkoutLogs,
+  logWorkout as logWorkoutApi,
+  createTemplate,
+} from "../../services/workouts";
 
 const STAGE_COLORS = {
   deep: "#5B6ABF",
@@ -83,13 +90,19 @@ function formatDuration(ms) {
 
 function getTodayDate() {
   const d = new Date();
-  return d.toISOString().split("T")[0];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function shiftDate(dateStr, offset) {
   const d = new Date(dateStr + "T00:00:00");
   d.setDate(d.getDate() + offset);
-  return d.toISOString().split("T")[0];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function formatDisplayDate(dateStr) {
@@ -114,6 +127,11 @@ export default function FitbitScreen() {
   const [selectedDate, setSelectedDate] = useState(getTodayDate());
   const [calendarVisible, setCalendarVisible] = useState(false);
   const [error, setError] = useState(null);
+  const [workoutModalVisible, setWorkoutModalVisible] = useState(false);
+  const [selectedWorkout, setSelectedWorkout] = useState(null);
+  const [templates, setTemplates] = useState([]);
+  const [workoutLogs, setWorkoutLogs] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   const getApi = useCallback(async () => {
     const credentials = await getCredentials();
@@ -177,8 +195,61 @@ export default function FitbitScreen() {
   useEffect(() => {
     if (connected) {
       fetchAllData(selectedDate);
+      fetchWorkoutData(selectedDate);
     }
-  }, [connected, selectedDate, fetchAllData]);
+  }, [connected, selectedDate, fetchAllData, fetchWorkoutData]);
+
+  const fetchWorkoutData = useCallback(
+    async (date) => {
+      try {
+        const api = await getApi();
+        const [templatesRes, logsRes] = await Promise.allSettled([
+          getTemplates(api),
+          getWorkoutLogs(api, date),
+        ]);
+        setTemplates(templatesRes.status === "fulfilled" && Array.isArray(templatesRes.value) ? templatesRes.value : []);
+        setWorkoutLogs(logsRes.status === "fulfilled" && Array.isArray(logsRes.value) ? logsRes.value : []);
+      } catch {
+        // Non-critical — workout detail is optional
+      }
+    },
+    [getApi],
+  );
+
+  const handleWorkoutTap = (workout) => {
+    setSelectedWorkout(workout);
+    setWorkoutModalVisible(true);
+  };
+
+  const handleLogWorkout = async (workoutData) => {
+    setIsSaving(true);
+    try {
+      const api = await getApi();
+      const result = await logWorkoutApi(api, { ...workoutData, date: selectedDate });
+      // Upsert: replace existing log for this fitbitWorkoutName, or add new
+      setWorkoutLogs((prev) => {
+        const filtered = prev.filter(
+          (log) => log.fitbitWorkoutName !== result.fitbitWorkoutName,
+        );
+        return [result, ...filtered];
+      });
+      return result;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveTemplate = async (templateData) => {
+    setIsSaving(true);
+    try {
+      const api = await getApi();
+      const result = await createTemplate(api, templateData);
+      setTemplates((prev) => [result, ...prev]);
+      return result;
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleConnect = async () => {
     try {
@@ -406,32 +477,69 @@ export default function FitbitScreen() {
               </View>
             </View>
             {activityData?.workouts?.length > 0 ? (
-              activityData.workouts.map((workout, index) => (
-                <View
-                  key={index}
-                  className="bg-surface-elevated rounded-lg p-3 mb-2"
-                >
-                  <View className="flex-row items-center">
-                    <MaterialCommunityIcons
-                      name={getWorkoutIcon(workout.name)}
-                      size={18}
-                      color="#4DA58E"
-                    />
-                    <Text className="text-sm text-primary font-medium ml-2">
-                      {workout.name}
-                    </Text>
-                  </View>
-                  <View className="flex-row items-center mt-1 ml-7">
-                    <Text className="text-xs text-muted">
-                      {formatDuration(workout.duration)}
-                    </Text>
-                    <Text className="text-xs text-muted mx-2">·</Text>
-                    <Text className="text-xs text-muted">
-                      {workout.calories} cal
-                    </Text>
-                  </View>
-                </View>
-              ))
+              activityData.workouts.map((workout, index) => {
+                const matchingLog = workoutLogs.find(
+                  (log) => log.fitbitWorkoutName === workout.name,
+                );
+                const hasLog = !!matchingLog;
+                return (
+                  <Pressable
+                    key={index}
+                    onPress={() => handleWorkoutTap(workout)}
+                    accessibilityRole="button"
+                    accessibilityLabel={hasLog ? `Edit detail for ${workout.name}` : `Add detail for ${workout.name}`}
+                    className="bg-surface-elevated rounded-lg p-3 mb-2"
+                  >
+                    <View className="flex-row items-center">
+                      <MaterialCommunityIcons
+                        name={getWorkoutIcon(workout.name)}
+                        size={18}
+                        color="#4DA58E"
+                      />
+                      <Text className="text-sm text-primary font-medium ml-2 flex-1">
+                        {workout.name}
+                      </Text>
+                      {hasLog ? (
+                        <MaterialCommunityIcons name="check-circle" size={16} color="#4DA58E" />
+                      ) : (
+                        <MaterialCommunityIcons name="plus-circle-outline" size={16} color="#5C6379" />
+                      )}
+                    </View>
+                    <View className="flex-row items-center mt-1 ml-7">
+                      <Text className="text-xs text-muted">
+                        {formatDuration(workout.duration)}
+                      </Text>
+                      <Text className="text-xs text-muted mx-2">{"\u00B7"}</Text>
+                      <Text className="text-xs text-muted">
+                        {workout.calories} cal
+                      </Text>
+                      {!hasLog && (
+                        <Text className="text-xs text-accent ml-2">Tap to add detail</Text>
+                      )}
+                    </View>
+                    {/* Show saved exercise detail inline */}
+                    {hasLog && matchingLog.exercises?.length > 0 && (
+                      <View className="mt-2 ml-7 border-t border-border pt-2">
+                        {matchingLog.exercises.slice(0, 3).map((ex, i) => (
+                          <View key={i} className="flex-row items-center justify-between py-0.5">
+                            <Text className="text-xs text-secondary flex-1" numberOfLines={1}>
+                              {ex.name}
+                            </Text>
+                            <Text className="text-xs text-muted ml-2">
+                              {ex.weightLbs}lbs {ex.sets}{"\u00D7"}{ex.reps}
+                            </Text>
+                          </View>
+                        ))}
+                        {matchingLog.exercises.length > 3 && (
+                          <Text className="text-xs text-muted mt-0.5">
+                            +{matchingLog.exercises.length - 3} more
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                  </Pressable>
+                );
+              })
             ) : (
               <Text className="text-sm text-muted text-center">
                 No workouts for today
@@ -770,6 +878,26 @@ export default function FitbitScreen() {
           selectedDate={selectedDate}
           onSelectDate={(date) => setSelectedDate(date)}
           onClose={() => setCalendarVisible(false)}
+        />
+      )}
+
+      {workoutModalVisible && (
+        <WorkoutLogModal
+          visible={workoutModalVisible}
+          onClose={() => {
+            setWorkoutModalVisible(false);
+            setSelectedWorkout(null);
+          }}
+          templates={templates}
+          onLogWorkout={handleLogWorkout}
+          onSaveTemplate={handleSaveTemplate}
+          isSaving={isSaving}
+          workoutName={selectedWorkout?.name || null}
+          existingLog={
+            selectedWorkout
+              ? workoutLogs.find((log) => log.fitbitWorkoutName === selectedWorkout.name) || null
+              : null
+          }
         />
       )}
     </GradientBackground>

@@ -103,6 +103,7 @@ export default function HomeScreen() {
             </Text>
           </View>
         )}
+
       </ScrollView>
 
       {/* Hamburger Menu */}

@@ -22,8 +22,10 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  fitbitToken FitbitToken?
-  profile     UserProfile?
+  fitbitToken      FitbitToken?
+  profile          UserProfile?
+  workoutTemplates WorkoutTemplate[]
+  workoutLogs      WorkoutLog[]
 
   @@map("users")
 }
@@ -68,4 +70,63 @@ model UserProfile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_profiles")
+}
+
+model WorkoutTemplate {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  name        String
+  description String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user      User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercises WorkoutTemplateExercise[]
+
+  @@map("workout_templates")
+}
+
+model WorkoutTemplateExercise {
+  id         String @id @default(uuid())
+  templateId String @map("template_id")
+  name       String
+  weightLbs  Float  @map("weight_lbs")
+  sets       Int
+  reps       Int
+  position   Int
+
+  template WorkoutTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@map("workout_template_exercises")
+}
+
+model WorkoutLog {
+  id                 String   @id @default(uuid())
+  userId             String   @map("user_id")
+  templateId         String?  @map("template_id")
+  date               String
+  description        String?
+  fitbitWorkoutName  String?  @map("fitbit_workout_name")
+  notes              String?
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercises WorkoutLogExercise[]
+
+  @@unique([userId, date, fitbitWorkoutName])
+  @@map("workout_logs")
+}
+
+model WorkoutLogExercise {
+  id        String @id @default(uuid())
+  logId     String @map("log_id")
+  name      String
+  weightLbs Float  @map("weight_lbs")
+  sets      Int
+  reps      Int
+  position  Int
+
+  log WorkoutLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+
+  @@map("workout_log_exercises")
 }

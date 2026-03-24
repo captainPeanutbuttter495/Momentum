@@ -3,6 +3,7 @@ import cors from "cors";
 import fitbitRoutes from "./routes/fitbit.js";
 import profileRoutes from "./routes/profile.js";
 import coachRoutes from "./routes/coach.js";
+import workoutRoutes from "./routes/workouts.js";
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api/fitbit", fitbitRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/coach", coachRoutes);
+app.use("/api/workouts", workoutRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {
