@@ -80,6 +80,37 @@ router.post("/insight", authenticated, requireUser, async (req, res) => {
       heartRate = results[2].status === "fulfilled" ? results[2].value : null;
     }
 
+    // Fetch manual workout logs for recap context
+    let workoutLogs = null;
+    let recentWorkouts = null;
+
+    if (context === "recap") {
+      try {
+        const [logsResult, historyResult] = await Promise.allSettled([
+          prisma.workoutLog.findMany({
+            where: { userId: req.user.id, date },
+            include: { exercises: { orderBy: { position: "asc" } } },
+          }),
+          prisma.workoutLog.findMany({
+            where: {
+              userId: req.user.id,
+              date: {
+                gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+              },
+            },
+            include: { exercises: { orderBy: { position: "asc" } } },
+            orderBy: { date: "desc" },
+          }),
+        ]);
+        const logs = logsResult.status === "fulfilled" ? logsResult.value : [];
+        const history = historyResult.status === "fulfilled" ? historyResult.value : [];
+        workoutLogs = logs.length > 0 ? logs : null;
+        recentWorkouts = history.length > 0 ? history : null;
+      } catch {
+        // Workout log fetch is non-critical; continue without it
+      }
+    }
+
     const insight = await getCoachInsight({
       context,
       date,
@@ -88,6 +119,8 @@ router.post("/insight", authenticated, requireUser, async (req, res) => {
       activity,
       heartRate,
       userName: req.user.name,
+      workoutLogs,
+      recentWorkouts,
     });
 
     const responseData = { ...insight, context, date };
