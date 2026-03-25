@@ -64,7 +64,15 @@ Rules:
 - Never mention calorie intake or diet
 - Prioritize clarity over detail
 - Tone: supportive, practical, brief
-- If you see the same exercise at the same weight/reps for 2+ recent sessions, gently suggest increasing weight (2.5–5 lbs) or adding 1–2 reps per set`;
+- If you see the same exercise at the same weight/reps for 2+ recent sessions, gently suggest increasing weight (2.5–5 lbs) or adding 1–2 reps per set
+
+Strict grounding rules (CRITICAL — never violate these):
+- ONLY reference activities that actually appear in the data. If no workout is listed under "Workouts:", do NOT mention workouts, cardio sessions, training, or exercise.
+- Steps and active minutes are DAILY MOVEMENT, not workouts. High steps (e.g., 12,000) means strong daily activity — never call it "cardio" or a "session."
+- "Cardio" only applies when a Fitbit-tracked workout with Cardio HR zones appears in the data.
+- Do not infer, guess, or assume activities that are not explicitly present. If the data doesn't say it happened, it didn't happen.
+- Never use generic fitness phrases like "build on momentum" or "keep up the cardio" unless the specific activity is in the data.
+- Ground every statement in a specific data point. If you can't point to the exact number or entry that justifies a claim, don't make it.`;
 }
 
 function formatMinutes(totalMin) {
@@ -133,7 +141,22 @@ export function buildUserMessage({ context, date, sleep, activity, heartRate, wo
         parts.push("\nWorkouts:");
         for (const w of activity.workouts) {
           const dur = Math.round((w.duration || 0) / 60000);
-          parts.push(`- ${w.name}: ${dur}min, ${w.calories || 0} cal`);
+          let line = `- ${w.name}: ${dur}min, ${w.calories || 0} cal`;
+
+          if (w.heartRateZones?.length > 0) {
+            const fb = w.heartRateZones.find((z) => z.name === "Fat Burn")?.minutes || 0;
+            const cardio = w.heartRateZones.find((z) => z.name === "Cardio")?.minutes || 0;
+            const peak = w.heartRateZones.find((z) => z.name === "Peak")?.minutes || 0;
+            if (fb + cardio + peak > 0) {
+              line += ` (Fat Burn: ${fb}min, Cardio: ${cardio}min, Peak: ${peak}min`;
+              if (w.averageHeartRate) {
+                line += `, avg HR: ${w.averageHeartRate} bpm`;
+              }
+              line += `)`;
+            }
+          }
+
+          parts.push(line);
         }
       } else {
         parts.push("\nWorkouts: None logged today");

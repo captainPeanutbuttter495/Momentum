@@ -172,6 +172,14 @@ export async function getFitbitActivityData(userId, date) {
       duration: a.activeDuration || a.duration || 0,
       startTime: a.startTime || null,
       steps: a.steps || 0,
+      heartRateZones: (a.heartRateZones || []).map((z) => ({
+        name: z.name,
+        min: z.min,
+        max: z.max,
+        minutes: z.minutes || 0,
+        caloriesOut: z.caloriesOut || 0,
+      })),
+      averageHeartRate: a.averageHeartRate || null,
     }));
 
   return {
