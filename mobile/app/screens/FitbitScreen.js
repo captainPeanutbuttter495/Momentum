@@ -517,6 +517,43 @@ export default function FitbitScreen() {
                         <Text className="text-xs text-accent ml-2">Tap to add detail</Text>
                       )}
                     </View>
+                    {/* Per-workout HR zones */}
+                    {workout.heartRateZones?.length > 0 && (() => {
+                      const fatBurn = workout.heartRateZones.find((z) => z.name === "Fat Burn");
+                      const cardio = workout.heartRateZones.find((z) => z.name === "Cardio");
+                      const peak = workout.heartRateZones.find((z) => z.name === "Peak");
+                      const hasZoneData = (fatBurn?.minutes || 0) + (cardio?.minutes || 0) + (peak?.minutes || 0) > 0;
+                      if (!hasZoneData) return null;
+                      return (
+                        <View className="flex-row items-center mt-1.5 ml-7 flex-wrap" style={{ gap: 8 }}>
+                          {[fatBurn, cardio, peak].filter(Boolean).map((zone) => (
+                            zone.minutes > 0 && (
+                              <View key={zone.name} className="flex-row items-center">
+                                <View
+                                  style={{
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: 3,
+                                    backgroundColor: ZONE_COLORS[zone.name] || "#5C6379",
+                                    marginRight: 4,
+                                  }}
+                                />
+                                <Text className="text-xs text-muted">
+                                  {zone.name === "Fat Burn" ? "FB" : zone.name} {zone.minutes}m
+                                </Text>
+                              </View>
+                            )
+                          ))}
+                          {workout.averageHeartRate && (
+                            <View className="flex-row items-center">
+                              <Text className="text-xs text-muted">
+                                avg {workout.averageHeartRate} bpm
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })()}
                     {/* Show saved exercise detail inline */}
                     {hasLog && matchingLog.exercises?.length > 0 && (
                       <View className="mt-2 ml-7 border-t border-border pt-2">
