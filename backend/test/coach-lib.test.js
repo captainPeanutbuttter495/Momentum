@@ -127,4 +127,77 @@ describe("buildUserMessage", () => {
     const msg = buildUserMessage({ context: "recap", date: "2026-03-22", sleep: sleepData, activity: null, heartRate: heartRateData });
     expect(msg).toContain("Activity: No data available");
   });
+
+  // ─── Yesterday comparison data ──────────────────────────────────
+
+  it("includes yesterday sleep and HR comparison when provided", () => {
+    const yesterday = {
+      sleep: {
+        summary: { totalMinutesAsleep: 360, stages: { deep: 70, rem: 90 } },
+        sleepLog: [{ efficiency: 82 }],
+      },
+      heartRate: { restingHeartRate: 65 },
+    };
+    const msg = buildUserMessage({ context: "morning", date: "2026-03-22", sleep: sleepData, heartRate: heartRateData, yesterday });
+    expect(msg).toContain("Yesterday's data (for comparison)");
+    expect(msg).toContain("Yesterday sleep: 6h 0min");
+    expect(msg).toContain("82% efficiency");
+    expect(msg).toContain("Yesterday resting HR: 65 bpm");
+    expect(msg).toContain("Yesterday stages: 70min deep, 90min REM");
+  });
+
+  it("includes yesterday activity in recap context", () => {
+    const yesterday = {
+      sleep: null,
+      heartRate: null,
+      activity: { steps: 10200, activeMinutes: { fairlyActive: 30, veryActive: 20 } },
+    };
+    const msg = buildUserMessage({ context: "recap", date: "2026-03-22", sleep: sleepData, activity: activityData, heartRate: heartRateData, yesterday });
+    expect(msg).toContain("Yesterday steps: 10,200");
+    expect(msg).toContain("Yesterday active minutes: 50 moderate-to-vigorous");
+  });
+
+  it("excludes yesterday activity from morning context", () => {
+    const yesterday = {
+      sleep: { summary: { totalMinutesAsleep: 360 }, sleepLog: [] },
+      heartRate: { restingHeartRate: 65 },
+      activity: { steps: 10200, activeMinutes: { fairlyActive: 30, veryActive: 20 } },
+    };
+    const msg = buildUserMessage({ context: "morning", date: "2026-03-22", sleep: sleepData, heartRate: heartRateData, yesterday });
+    expect(msg).not.toContain("Yesterday steps");
+    expect(msg).not.toContain("Yesterday active minutes");
+  });
+
+  it("omits yesterday section when yesterday is null", () => {
+    const msg = buildUserMessage({ context: "morning", date: "2026-03-22", sleep: sleepData, heartRate: heartRateData, yesterday: null });
+    expect(msg).not.toContain("Yesterday");
+  });
+});
+
+// ─── buildSystemPrompt — readiness & comparison focus ────────────
+
+describe("buildSystemPrompt — readiness focus", () => {
+  it("frames role as recovery and readiness coach", () => {
+    const prompt = buildSystemPrompt(testProfile, "John");
+    expect(prompt).toContain("recovery and readiness coach");
+    expect(prompt).toContain("push harder, maintain effort, or pull back");
+  });
+
+  it("includes change-over-static principle", () => {
+    const prompt = buildSystemPrompt(testProfile, "John");
+    expect(prompt).toContain("CHANGE over static values");
+    expect(prompt).toContain("BIGGEST change");
+  });
+
+  it("requires headline direction not vague observations", () => {
+    const prompt = buildSystemPrompt(testProfile, "John");
+    expect(prompt).toContain("clear DIRECTION");
+    expect(prompt).toContain("push harder, stay steady, or ease up");
+  });
+
+  it("instructs comparison with yesterday when available", () => {
+    const prompt = buildSystemPrompt(testProfile, "John");
+    expect(prompt).toContain("ALWAYS compare");
+    expect(prompt).toContain("yesterday");
+  });
 });

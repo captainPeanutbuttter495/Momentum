@@ -26,6 +26,8 @@ model User {
   profile          UserProfile?
   workoutTemplates WorkoutTemplate[]
   workoutLogs      WorkoutLog[]
+  customFoods      CustomFood[]
+  foodLogs         FoodLog[]
 
   @@map("users")
 }
@@ -129,4 +131,49 @@ model WorkoutLogExercise {
   log WorkoutLog @relation(fields: [logId], references: [id], onDelete: Cascade)
 
   @@map("workout_log_exercises")
+}
+
+model CustomFood {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  name        String
+  brand       String?
+  servingSize Float    @map("serving_size")
+  servingUnit String   @map("serving_unit")
+  calories    Float
+  proteinG    Float    @map("protein_g")
+  carbsG      Float    @map("carbs_g")
+  fatG        Float    @map("fat_g")
+  photoUrl    String?  @map("photo_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  foodLogs FoodLog[]
+
+  @@map("custom_foods")
+}
+
+model FoodLog {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  date         String
+  mealCategory String   @map("meal_category")
+  foodName     String   @map("food_name")
+  fdcId        String?  @map("fdc_id")
+  customFoodId String?  @map("custom_food_id")
+  servingQty   Float    @map("serving_qty")
+  servingSize  Float    @map("serving_size")
+  servingUnit  String   @map("serving_unit")
+  calories     Float
+  proteinG     Float    @map("protein_g")
+  carbsG       Float    @map("carbs_g")
+  fatG         Float    @map("fat_g")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customFood CustomFood? @relation(fields: [customFoodId], references: [id], onDelete: SetNull)
+
+  @@map("food_logs")
 }
