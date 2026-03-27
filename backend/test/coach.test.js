@@ -266,4 +266,75 @@ describe("POST /api/coach/insight", () => {
     const coachCall = mockGetCoachInsight.mock.calls[0][0];
     expect(coachCall.userName).toBe("Test User");
   });
+
+  // ─── Yesterday comparison data ──────────────────────────────────
+
+  it("passes yesterday data to coach insight for morning context", async () => {
+    prismaMock.userProfile.findUnique.mockResolvedValue(testProfile);
+    mockGetFitbitSleepData.mockResolvedValue({ summary: { totalMinutesAsleep: 420 } });
+    mockGetFitbitHeartRateData.mockResolvedValue({ restingHeartRate: 62 });
+    mockGetCoachInsight.mockResolvedValue(mockInsightResponse);
+
+    await request(app)
+      .post("/api/coach/insight")
+      .send({ context: "morning", date: "2026-03-22" });
+
+    // Morning fetches sleep + HR for both today and yesterday
+    expect(mockGetFitbitSleepData).toHaveBeenCalledWith("user-123", "2026-03-22");
+    expect(mockGetFitbitSleepData).toHaveBeenCalledWith("user-123", "2026-03-21");
+    expect(mockGetFitbitHeartRateData).toHaveBeenCalledWith("user-123", "2026-03-22");
+    expect(mockGetFitbitHeartRateData).toHaveBeenCalledWith("user-123", "2026-03-21");
+
+    const coachCall = mockGetCoachInsight.mock.calls[0][0];
+    expect(coachCall.yesterday).toBeTruthy();
+    expect(coachCall.yesterday.sleep).toEqual({ summary: { totalMinutesAsleep: 420 } });
+    expect(coachCall.yesterday.heartRate).toEqual({ restingHeartRate: 62 });
+  });
+
+  it("passes yesterday activity data for recap context", async () => {
+    prismaMock.userProfile.findUnique.mockResolvedValue(testProfile);
+    mockGetFitbitSleepData.mockResolvedValue({ summary: { totalMinutesAsleep: 420 } });
+    mockGetFitbitActivityData.mockResolvedValue({ steps: 8500, caloriesOut: 2100 });
+    mockGetFitbitHeartRateData.mockResolvedValue({ restingHeartRate: 62 });
+    mockGetCoachInsight.mockResolvedValue(mockInsightResponse);
+
+    await request(app)
+      .post("/api/coach/insight")
+      .send({ context: "recap", date: "2026-03-22" });
+
+    // Recap fetches all three for both today and yesterday
+    expect(mockGetFitbitActivityData).toHaveBeenCalledWith("user-123", "2026-03-22");
+    expect(mockGetFitbitActivityData).toHaveBeenCalledWith("user-123", "2026-03-21");
+
+    const coachCall = mockGetCoachInsight.mock.calls[0][0];
+    expect(coachCall.yesterday).toBeTruthy();
+    expect(coachCall.yesterday.activity).toEqual({ steps: 8500, caloriesOut: 2100 });
+  });
+
+  it("sets yesterday to null when all yesterday fetches fail", async () => {
+    prismaMock.userProfile.findUnique.mockResolvedValue(testProfile);
+
+    // Today succeeds, yesterday fails
+    let callCount = 0;
+    mockGetFitbitSleepData.mockImplementation(() => {
+      callCount++;
+      if (callCount <= 1) return Promise.resolve({ summary: { totalMinutesAsleep: 420 } });
+      return Promise.reject(new Error("API error"));
+    });
+    let hrCallCount = 0;
+    mockGetFitbitHeartRateData.mockImplementation(() => {
+      hrCallCount++;
+      if (hrCallCount <= 1) return Promise.resolve({ restingHeartRate: 62 });
+      return Promise.reject(new Error("API error"));
+    });
+    mockGetCoachInsight.mockResolvedValue(mockInsightResponse);
+
+    await request(app)
+      .post("/api/coach/insight")
+      .send({ context: "morning", date: "2026-03-22" });
+
+    const coachCall = mockGetCoachInsight.mock.calls[0][0];
+    expect(coachCall.sleep).toEqual({ summary: { totalMinutesAsleep: 420 } });
+    expect(coachCall.yesterday).toBeNull();
+  });
 });
