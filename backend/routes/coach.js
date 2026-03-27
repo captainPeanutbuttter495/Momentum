@@ -18,6 +18,12 @@ function getCacheKey(userId, date, context) {
   return `${userId}:${date}:${context}`;
 }
 
+function getDateOffset(dateStr, daysBack) {
+  const d = new Date(dateStr + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() - daysBack);
+  return d.toISOString().split("T")[0];
+}
+
 function getCachedInsight(userId, date, context) {
   const key = getCacheKey(userId, date, context);
   const cached = insightCache.get(key);
@@ -58,26 +64,41 @@ router.post("/insight", authenticated, requireUser, async (req, res) => {
     });
 
     // Fetch health data in parallel based on context
+    // Also fetch yesterday's data for comparison
+    const yesterdayDate = getDateOffset(date, 1);
     let sleep = null;
     let activity = null;
     let heartRate = null;
+    let yesterdaySleep = null;
+    let yesterdayActivity = null;
+    let yesterdayHeartRate = null;
 
     if (context === "morning") {
       const results = await Promise.allSettled([
         getFitbitSleepData(req.user.id, date),
         getFitbitHeartRateData(req.user.id, date),
+        getFitbitSleepData(req.user.id, yesterdayDate),
+        getFitbitHeartRateData(req.user.id, yesterdayDate),
       ]);
       sleep = results[0].status === "fulfilled" ? results[0].value : null;
       heartRate = results[1].status === "fulfilled" ? results[1].value : null;
+      yesterdaySleep = results[2].status === "fulfilled" ? results[2].value : null;
+      yesterdayHeartRate = results[3].status === "fulfilled" ? results[3].value : null;
     } else {
       const results = await Promise.allSettled([
         getFitbitSleepData(req.user.id, date),
         getFitbitActivityData(req.user.id, date),
         getFitbitHeartRateData(req.user.id, date),
+        getFitbitSleepData(req.user.id, yesterdayDate),
+        getFitbitActivityData(req.user.id, yesterdayDate),
+        getFitbitHeartRateData(req.user.id, yesterdayDate),
       ]);
       sleep = results[0].status === "fulfilled" ? results[0].value : null;
       activity = results[1].status === "fulfilled" ? results[1].value : null;
       heartRate = results[2].status === "fulfilled" ? results[2].value : null;
+      yesterdaySleep = results[3].status === "fulfilled" ? results[3].value : null;
+      yesterdayActivity = results[4].status === "fulfilled" ? results[4].value : null;
+      yesterdayHeartRate = results[5].status === "fulfilled" ? results[5].value : null;
     }
 
     // Fetch manual workout logs for recap context
@@ -111,6 +132,11 @@ router.post("/insight", authenticated, requireUser, async (req, res) => {
       }
     }
 
+    // Bundle yesterday's data (null if all fetches failed)
+    const yesterday = (yesterdaySleep || yesterdayHeartRate || yesterdayActivity)
+      ? { sleep: yesterdaySleep, heartRate: yesterdayHeartRate, activity: yesterdayActivity }
+      : null;
+
     const insight = await getCoachInsight({
       context,
       date,
@@ -121,6 +147,7 @@ router.post("/insight", authenticated, requireUser, async (req, res) => {
       userName: req.user.name,
       workoutLogs,
       recentWorkouts,
+      yesterday,
     });
 
     const responseData = { ...insight, context, date };
