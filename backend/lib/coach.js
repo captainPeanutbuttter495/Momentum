@@ -43,7 +43,7 @@ export function buildSystemPrompt(profile, userName) {
     goalCoaching = GOAL_COACHING.MAINTAIN;
   }
 
-  return `You are a daily briefing system for a fitness app. You produce extremely concise, scannable insights. If it takes more than 5 seconds to read, it's too long.
+  return `You are a recovery and readiness coach for a fitness app. Your single job: answer "How recovered is the user, and should they push harder, maintain effort, or pull back today?"
 
 ${clientInfo}
 
@@ -55,15 +55,21 @@ ${goalCoaching}
 Respond ONLY with valid JSON in this exact format (no markdown, no code fences):
 {"headline":"...","keySignals":["...","..."],"focus":["...","..."]}
 
+CORE PRINCIPLE — CHANGE over static values:
+- If sleep improved or dropped vs yesterday, THAT is the story. If resting HR spiked or fell, THAT is the story.
+- Lead with the BIGGEST change or the single most actionable signal.
+- Every statement must answer: "Why does this matter TODAY?"
+- If no yesterday data is provided, base decisions on how today's absolute values indicate recovery (e.g., deep sleep %, RHR level, efficiency).
+
 Rules:
-- headline: Max 8 words. The single takeaway.
-- keySignals: Max 2 bullets. What the data says. Reference numbers only when critical (e.g., "~7h sleep, good quality"). Keep each under 8 words.
-- focus: Max 2 bullets. Gentle guidance, not prescriptions. Say "keep activity steady" not "do a 30-minute jog at moderate pace". Keep each under 10 words.
+- headline: Max 8 words. Must include a clear DIRECTION — push harder, stay steady, or ease up. Never a vague observation ("sleep solid"). Say what it MEANS for today ("Well-rested — push intensity today").
+- keySignals: Max 2 bullets. When yesterday's data is available, ALWAYS compare (e.g., "Sleep up 40min vs yesterday"). When values are stable, say so ("RHR steady at 58 — consistent recovery"). Max 15 words each.
+- focus: Max 2 bullets. Tie guidance directly to recovery state. Say "well-rested — increase intensity today" not "keep up the good work". Max 12 words each.
 - Never prescribe specific exercises, durations, or exact numbers unless truly critical
 - Never repeat the same idea in different words
 - Never mention calorie intake or diet
-- Prioritize clarity over detail
-- Tone: supportive, practical, brief
+- Prioritize the STRONGEST signal — the one data point that most changes today's plan
+- Tone: direct, concise, like a coach who knows the numbers
 - If you see the same exercise at the same weight/reps for 2+ recent sessions, gently suggest increasing weight (2.5–5 lbs) or adding 1–2 reps per set
 
 Strict grounding rules (CRITICAL — never violate these):
@@ -93,7 +99,7 @@ function formatTime(isoString) {
   }
 }
 
-export function buildUserMessage({ context, date, sleep, activity, heartRate, workoutLogs, recentWorkouts }) {
+export function buildUserMessage({ context, date, sleep, activity, heartRate, workoutLogs, recentWorkouts, yesterday }) {
   const parts = [];
 
   parts.push(`Here's my data for ${date}:\n`);
@@ -187,6 +193,33 @@ export function buildUserMessage({ context, date, sleep, activity, heartRate, wo
     }
   }
 
+  // Yesterday's data for comparison
+  if (yesterday) {
+    parts.push("\n--- Yesterday's data (for comparison) ---");
+
+    if (yesterday.sleep?.summary) {
+      const ys = yesterday.sleep.summary;
+      const yHours = Math.floor((ys.totalMinutesAsleep || 0) / 60);
+      const yMins = (ys.totalMinutesAsleep || 0) % 60;
+      const yEfficiency = yesterday.sleep.sleepLog?.[0]?.efficiency;
+      parts.push(`Yesterday sleep: ${yHours}h ${yMins}min${yEfficiency != null ? ` (${yEfficiency}% efficiency)` : ""}`);
+      if (ys.stages) {
+        parts.push(`Yesterday stages: ${ys.stages.deep || 0}min deep, ${ys.stages.rem || 0}min REM`);
+      }
+    }
+
+    if (yesterday.heartRate?.restingHeartRate) {
+      parts.push(`Yesterday resting HR: ${yesterday.heartRate.restingHeartRate} bpm`);
+    }
+
+    if (context === "recap" && yesterday.activity) {
+      const ya = yesterday.activity;
+      const yActiveMin = (ya.activeMinutes?.fairlyActive || 0) + (ya.activeMinutes?.veryActive || 0);
+      parts.push(`Yesterday steps: ${ya.steps?.toLocaleString() || 0}`);
+      parts.push(`Yesterday active minutes: ${yActiveMin} moderate-to-vigorous`);
+    }
+  }
+
   // Closing question
   if (context === "morning") {
     parts.push("\nWhat should I do for my workout today?");
@@ -197,13 +230,47 @@ export function buildUserMessage({ context, date, sleep, activity, heartRate, wo
   return parts.join("\n");
 }
 
-export async function getCoachInsight({ context, date, profile, sleep, activity, heartRate, userName, workoutLogs, recentWorkouts }) {
+// Ensure a value is a flat array of strings (handles stringified arrays, nested arrays, etc.)
+function toStringArray(val) {
+  if (!val) return [];
+  if (typeof val === "string") {
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) return parsed.map(String);
+    } catch {
+      // not JSON — treat as a single string item
+    }
+    return [val];
+  }
+  if (Array.isArray(val)) return val.map(String);
+  return [];
+}
+
+// Extract fields from malformed or truncated JSON using regex
+function recoverPartialInsight(text) {
+  const headlineMatch = text.match(/"headline"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  const headline = headlineMatch ? headlineMatch[1] : "";
+
+  const extractQuotedItems = (key) => {
+    const section = text.match(new RegExp(`"${key}"\\s*:\\s*\\[([\\s\\S]*?)(?:\\]|$)`));
+    if (!section) return [];
+    return [...section[1].matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]);
+  };
+
+  return {
+    headline,
+    keySignals: extractQuotedItems("keySignals"),
+    focus: extractQuotedItems("focus"),
+  };
+}
+
+export async function getCoachInsight({ context, date, profile, sleep, activity, heartRate, userName, workoutLogs, recentWorkouts, yesterday }) {
   const systemPrompt = buildSystemPrompt(profile, userName);
-  const userMessage = buildUserMessage({ context, date, sleep, activity, heartRate, workoutLogs, recentWorkouts });
+  const userMessage = buildUserMessage({ context, date, sleep, activity, heartRate, workoutLogs, recentWorkouts, yesterday });
 
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 300,
+    max_tokens: 500,
     system: systemPrompt,
     messages: [{ role: "user", content: userMessage }],
   });
@@ -216,16 +283,20 @@ export async function getCoachInsight({ context, date, profile, sleep, activity,
   try {
     const parsed = JSON.parse(cleaned);
     return {
-      headline: parsed.headline || "",
-      keySignals: parsed.keySignals || [],
-      focus: parsed.focus || [],
+      headline: typeof parsed.headline === "string" ? parsed.headline : "",
+      keySignals: toStringArray(parsed.keySignals),
+      focus: toStringArray(parsed.focus),
     };
   } catch {
-    // Fallback if Claude doesn't return valid JSON
+    // Try to recover usable fields from malformed/truncated JSON
+    const recovered = recoverPartialInsight(cleaned);
+    if (recovered.headline || recovered.keySignals.length > 0) {
+      return recovered;
+    }
     return {
       headline: "Here's your update",
       keySignals: [],
-      focus: [cleaned.slice(0, 200)],
+      focus: [],
     };
   }
 }
