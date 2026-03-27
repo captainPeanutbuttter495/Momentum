@@ -4,6 +4,7 @@ import fitbitRoutes from "./routes/fitbit.js";
 import profileRoutes from "./routes/profile.js";
 import coachRoutes from "./routes/coach.js";
 import workoutRoutes from "./routes/workouts.js";
+import nutritionRoutes from "./routes/nutrition.js";
 
 const app = express();
 
@@ -18,7 +19,7 @@ app.use(
   }),
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 // Health check
 app.get("/api/health", (req, res) => {
@@ -30,6 +31,7 @@ app.use("/api/fitbit", fitbitRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/coach", coachRoutes);
 app.use("/api/workouts", workoutRoutes);
+app.use("/api/nutrition", nutritionRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {
