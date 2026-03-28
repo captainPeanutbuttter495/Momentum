@@ -201,3 +201,123 @@ describe("buildSystemPrompt — readiness focus", () => {
     expect(prompt).toContain("yesterday");
   });
 });
+
+// ─── buildSystemPrompt — training progression section ────────────
+
+describe("buildSystemPrompt — training progression section", () => {
+  it("includes training progression coach section", () => {
+    const prompt = buildSystemPrompt(testProfile, "John");
+    expect(prompt).toContain("TRAINING PROGRESSION COACH");
+  });
+
+  it("includes rep range guidance", () => {
+    const prompt = buildSystemPrompt(testProfile, "John");
+    expect(prompt).toContain("8-12");
+  });
+
+  it("includes trainingNote format instruction", () => {
+    const prompt = buildSystemPrompt(testProfile, "John");
+    expect(prompt).toContain("trainingNote");
+  });
+
+  it("requires workout data for training note", () => {
+    const prompt = buildSystemPrompt(testProfile, "John");
+    expect(prompt).toContain("do NOT include trainingNote");
+  });
+
+  it("instructs AI to use app-computed trends", () => {
+    const prompt = buildSystemPrompt(testProfile, "John");
+    expect(prompt).toContain("computed trend and suggestionHint");
+  });
+
+  it("prioritizes recovery over progression when strain is high", () => {
+    const prompt = buildSystemPrompt(testProfile, "John");
+    expect(prompt).toContain("workoutStrain");
+    expect(prompt).toContain("prioritize recovery");
+  });
+});
+
+// ─── buildUserMessage — workout summary ──────────────────────────
+
+describe("buildUserMessage — workout summary", () => {
+  const workoutSummary = {
+    workoutCompleted: true,
+    workoutType: "strength",
+    durationMin: 56,
+    exerciseCount: 9,
+    bodyRegion: "full_body",
+    estimatedIntensity: "moderate",
+    estimatedVolume: "moderate",
+    avgWorkoutHeartRate: 135,
+    cardioZoneMinutes: 6,
+    fatBurnZoneMinutes: 41,
+    peakZoneMinutes: 0,
+    workoutStrain: "moderate",
+  };
+
+  it("includes workout summary section when provided", () => {
+    const msg = buildUserMessage({ context: "recap", date: "2026-03-22", sleep: sleepData, activity: activityData, heartRate: heartRateData, workoutSummary });
+    expect(msg).toContain("Workout Summary:");
+    expect(msg).toContain("Type: strength");
+    expect(msg).toContain("Duration: 56min");
+    expect(msg).toContain("Exercises: 9");
+  });
+
+  it("excludes workout summary when workoutSummary is null", () => {
+    const msg = buildUserMessage({ context: "recap", date: "2026-03-22", sleep: sleepData, activity: activityData, heartRate: heartRateData, workoutSummary: null });
+    expect(msg).not.toContain("Workout Summary:");
+  });
+
+  it("formats all workout summary fields", () => {
+    const msg = buildUserMessage({ context: "recap", date: "2026-03-22", sleep: sleepData, activity: activityData, heartRate: heartRateData, workoutSummary });
+    expect(msg).toContain("Body Region: full_body");
+    expect(msg).toContain("Intensity: moderate");
+    expect(msg).toContain("Volume: moderate");
+    expect(msg).toContain("Workout Strain: moderate");
+    expect(msg).toContain("Avg HR: 135 bpm");
+    expect(msg).toContain("Fat Burn: 41min");
+    expect(msg).toContain("Cardio: 6min");
+    expect(msg).toContain("Peak: 0min");
+  });
+});
+
+// ─── buildUserMessage — exercise progressions ───────────────────
+
+describe("buildUserMessage — exercise progressions", () => {
+  const exerciseProgressions = [
+    {
+      exercise: "Dumbbell Chest Press",
+      recentSessions: [
+        { date: "2026-03-20", weightLbs: 30, reps: 8, sets: 3 },
+        { date: "2026-03-23", weightLbs: 30, reps: 10, sets: 3 },
+        { date: "2026-03-26", weightLbs: 30, reps: 10, sets: 3 },
+      ],
+      trend: "stable_weight_reps_improving",
+      suggestionHint: "consider_add_weight_soon",
+    },
+  ];
+
+  it("includes exercise progressions when provided", () => {
+    const msg = buildUserMessage({ context: "recap", date: "2026-03-22", sleep: sleepData, activity: activityData, heartRate: heartRateData, exerciseProgressions });
+    expect(msg).toContain("Exercise Progressions (app-computed");
+    expect(msg).toContain("Dumbbell Chest Press");
+  });
+
+  it("excludes progressions section when exerciseProgressions is null", () => {
+    const msg = buildUserMessage({ context: "recap", date: "2026-03-22", sleep: sleepData, activity: activityData, heartRate: heartRateData, exerciseProgressions: null });
+    expect(msg).not.toContain("Exercise Progressions");
+  });
+
+  it("excludes progressions section when exerciseProgressions is empty array", () => {
+    const msg = buildUserMessage({ context: "recap", date: "2026-03-22", sleep: sleepData, activity: activityData, heartRate: heartRateData, exerciseProgressions: [] });
+    expect(msg).not.toContain("Exercise Progressions");
+  });
+
+  it("formats trend and hint for each exercise", () => {
+    const msg = buildUserMessage({ context: "recap", date: "2026-03-22", sleep: sleepData, activity: activityData, heartRate: heartRateData, exerciseProgressions });
+    expect(msg).toContain("30lbs");
+    expect(msg).toContain("3x8 → 3x10 → 3x10");
+    expect(msg).toContain("Trend: stable_weight_reps_improving");
+    expect(msg).toContain("Hint: consider_add_weight_soon");
+  });
+});

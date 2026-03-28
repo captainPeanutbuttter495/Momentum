@@ -70,7 +70,11 @@ Rules:
 - Never mention calorie intake or diet
 - Prioritize the STRONGEST signal — the one data point that most changes today's plan
 - Tone: direct, concise, like a coach who knows the numbers
-- If you see the same exercise at the same weight/reps for 2+ recent sessions, gently suggest increasing weight (2.5–5 lbs) or adding 1–2 reps per set
+- NEVER invent progression advice from raw workout history alone. Only discuss load increases or rep increases when the exercise progression data includes a suggestionHint. If suggestionHint is absent, you may describe the trend briefly but do NOT recommend a change.
+
+Context-specific rules:
+- MORNING context: Plan the day ahead. Advise whether to push, maintain, or ease up today based on recovery signals.
+- RECAP context: Reflect on what already happened today. Do NOT give advice for earlier in the day. Acknowledge what the user did, evaluate it, and frame all guidance for tomorrow or the next session. Recap should never tell the user what they should have done — it should tell them what to do next.
 
 Strict grounding rules (CRITICAL — never violate these):
 - ONLY reference activities that actually appear in the data. If no workout is listed under "Workouts:", do NOT mention workouts, cardio sessions, training, or exercise.
@@ -78,7 +82,21 @@ Strict grounding rules (CRITICAL — never violate these):
 - "Cardio" only applies when a Fitbit-tracked workout with Cardio HR zones appears in the data.
 - Do not infer, guess, or assume activities that are not explicitly present. If the data doesn't say it happened, it didn't happen.
 - Never use generic fitness phrases like "build on momentum" or "keep up the cardio" unless the specific activity is in the data.
-- Ground every statement in a specific data point. If you can't point to the exact number or entry that justifies a claim, don't make it.`;
+- Ground every statement in a specific data point. If you can't point to the exact number or entry that justifies a claim, don't make it.
+
+TRAINING PROGRESSION COACH:
+When workout summary and exercise progression data are provided, you also serve as a training progression coach.
+
+Rules for training progression:
+- Only discuss progressive overload when the data explicitly includes exercise progressions with 2+ sessions of the same exercise
+- Base progression suggestions on the computed trend and suggestionHint — do not invent your own analysis
+- If workoutStrain is "high" and recovery signals are poor (low sleep, elevated RHR), prioritize recovery messaging over load increase suggestions
+- Distinguish structured strength training (exercises with weight/sets/reps) from general daily movement (steps, active minutes)
+- Rep-first progression (HARD RULE): For exercises in the 8-12 target range, ALWAYS prefer rep increases before load increases. If reps are still below 12 at the current weight, do NOT recommend increasing load unless suggestionHint explicitly says to. Only recommend increasing weight when the user has reached the top of the rep range (12) across repeated sessions.
+- Dropping below 8 reps after a weight increase means hold at that weight and build reps back up
+- When trainingNote data is warranted, include a "trainingNote" field in your JSON response: {"headline":"...","keySignals":["..."],"focus":["..."],"trainingNote":"..."}
+- trainingNote: Max 1 sentence. Summarize the most important progression insight naturally. Only include when workout/exercise data is present
+- If no workout data or exercise progressions are provided, do NOT include trainingNote and do NOT mention training progression`;
 }
 
 function formatMinutes(totalMin) {
@@ -99,7 +117,7 @@ function formatTime(isoString) {
   }
 }
 
-export function buildUserMessage({ context, date, sleep, activity, heartRate, workoutLogs, recentWorkouts, yesterday }) {
+export function buildUserMessage({ context, date, sleep, activity, heartRate, workoutLogs, recentWorkouts, yesterday, workoutSummary, exerciseProgressions }) {
   const parts = [];
 
   parts.push(`Here's my data for ${date}:\n`);
@@ -184,12 +202,36 @@ export function buildUserMessage({ context, date, sleep, activity, heartRate, wo
 
   // Recent workout history for progressive overload analysis
   if (recentWorkouts?.length > 0) {
-    parts.push("\nRecent workout history (last 2 weeks):");
+    parts.push("\nRecent workout history (last 3 weeks):");
     for (const log of recentWorkouts) {
       const exercises = (log.exercises || [])
         .map((ex) => `${ex.name} ${ex.weightLbs}lbs×${ex.sets}×${ex.reps}`)
         .join(", ");
       parts.push(`- ${log.date}: ${exercises}`);
+    }
+  }
+
+  // Workout summary (derived by app before prompting)
+  if (workoutSummary) {
+    parts.push("\nWorkout Summary:");
+    parts.push(`- Type: ${workoutSummary.workoutType}, Duration: ${workoutSummary.durationMin}min, Exercises: ${workoutSummary.exerciseCount}`);
+    parts.push(`- Body Region: ${workoutSummary.bodyRegion}, Intensity: ${workoutSummary.estimatedIntensity}, Volume: ${workoutSummary.estimatedVolume}`);
+    parts.push(`- Workout Strain: ${workoutSummary.workoutStrain}`);
+    const hrPart = workoutSummary.avgWorkoutHeartRate ? `Avg HR: ${workoutSummary.avgWorkoutHeartRate} bpm | ` : "";
+    parts.push(`- ${hrPart}Fat Burn: ${workoutSummary.fatBurnZoneMinutes}min, Cardio: ${workoutSummary.cardioZoneMinutes}min, Peak: ${workoutSummary.peakZoneMinutes}min`);
+  }
+
+  // Exercise progressions (app-computed trends for AI to explain)
+  if (exerciseProgressions?.length > 0) {
+    parts.push("\nExercise Progressions (app-computed — explain naturally):");
+    for (const prog of exerciseProgressions) {
+      const sessionStr = prog.recentSessions
+        .map((s) => `${s.sets}x${s.reps}`)
+        .join(" → ");
+      const weight = prog.recentSessions[0]?.weightLbs || 0;
+      let line = `- ${prog.exercise}: ${weight}lbs (${sessionStr}) | Trend: ${prog.trend}`;
+      if (prog.suggestionHint) line += ` | Hint: ${prog.suggestionHint}`;
+      parts.push(line);
     }
   }
 
@@ -257,19 +299,24 @@ function recoverPartialInsight(text) {
     return [...section[1].matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]);
   };
 
-  return {
+  const trainingNoteMatch = text.match(/"trainingNote"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  const result = {
     headline,
     keySignals: extractQuotedItems("keySignals"),
     focus: extractQuotedItems("focus"),
   };
+  if (trainingNoteMatch?.[1]) {
+    result.trainingNote = trainingNoteMatch[1];
+  }
+  return result;
 }
 
-export async function getCoachInsight({ context, date, profile, sleep, activity, heartRate, userName, workoutLogs, recentWorkouts, yesterday }) {
+export async function getCoachInsight({ context, date, profile, sleep, activity, heartRate, userName, workoutLogs, recentWorkouts, yesterday, workoutSummary, exerciseProgressions }) {
   const systemPrompt = buildSystemPrompt(profile, userName);
-  const userMessage = buildUserMessage({ context, date, sleep, activity, heartRate, workoutLogs, recentWorkouts, yesterday });
+  const userMessage = buildUserMessage({ context, date, sleep, activity, heartRate, workoutLogs, recentWorkouts, yesterday, workoutSummary, exerciseProgressions });
 
   const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "claude-sonnet-4-6",
     max_tokens: 500,
     system: systemPrompt,
     messages: [{ role: "user", content: userMessage }],
@@ -282,11 +329,15 @@ export async function getCoachInsight({ context, date, profile, sleep, activity,
 
   try {
     const parsed = JSON.parse(cleaned);
-    return {
+    const result = {
       headline: typeof parsed.headline === "string" ? parsed.headline : "",
       keySignals: toStringArray(parsed.keySignals),
       focus: toStringArray(parsed.focus),
     };
+    if (typeof parsed.trainingNote === "string" && parsed.trainingNote) {
+      result.trainingNote = parsed.trainingNote;
+    }
+    return result;
   } catch {
     // Try to recover usable fields from malformed/truncated JSON
     const recovered = recoverPartialInsight(cleaned);

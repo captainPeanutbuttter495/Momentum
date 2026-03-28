@@ -24,6 +24,8 @@ const mockGetFitbitSleepData = vi.hoisted(() => vi.fn());
 const mockGetFitbitActivityData = vi.hoisted(() => vi.fn());
 const mockGetFitbitHeartRateData = vi.hoisted(() => vi.fn());
 const mockGetCoachInsight = vi.hoisted(() => vi.fn());
+const mockBuildWorkoutSummary = vi.hoisted(() => vi.fn());
+const mockBuildExerciseProgressions = vi.hoisted(() => vi.fn());
 
 // Mock Prisma
 vi.mock("../db.js", () => ({ default: prismaMock }));
@@ -58,6 +60,12 @@ vi.mock("../lib/fitbit-api.js", () => ({
 // Mock coach.js
 vi.mock("../lib/coach.js", () => ({
   getCoachInsight: mockGetCoachInsight,
+}));
+
+// Mock training-analysis.js
+vi.mock("../lib/training-analysis.js", () => ({
+  buildWorkoutSummary: mockBuildWorkoutSummary,
+  buildExerciseProgressions: mockBuildExerciseProgressions,
 }));
 
 // ─── Import app after mocks ────────────────────────────────────────
@@ -336,5 +344,92 @@ describe("POST /api/coach/insight", () => {
     const coachCall = mockGetCoachInsight.mock.calls[0][0];
     expect(coachCall.sleep).toEqual({ summary: { totalMinutesAsleep: 420 } });
     expect(coachCall.yesterday).toBeNull();
+  });
+});
+
+// ─── Training Progression ─────────────────────────────────────────
+
+describe("POST /api/coach/insight — training progression", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    insightCache.clear();
+    asUser();
+  });
+
+  it("passes workoutSummary and exerciseProgressions to getCoachInsight for recap", async () => {
+    prismaMock.userProfile.findUnique.mockResolvedValue(testProfile);
+    mockGetFitbitSleepData.mockResolvedValue({ summary: { totalMinutesAsleep: 420 } });
+    mockGetFitbitActivityData.mockResolvedValue({ steps: 8500, caloriesOut: 2100, workouts: [] });
+    mockGetFitbitHeartRateData.mockResolvedValue({ restingHeartRate: 62 });
+
+    const mockSummary = { workoutCompleted: true, workoutType: "strength", workoutStrain: "moderate" };
+    const mockProgressions = [{ exercise: "Bench Press", trend: "reps_increasing" }];
+    mockBuildWorkoutSummary.mockReturnValue(mockSummary);
+    mockBuildExerciseProgressions.mockReturnValue(mockProgressions);
+    mockGetCoachInsight.mockResolvedValue(mockInsightResponse);
+
+    await request(app)
+      .post("/api/coach/insight")
+      .send({ context: "recap", date: "2026-03-22" });
+
+    const coachCall = mockGetCoachInsight.mock.calls[0][0];
+    expect(coachCall.workoutSummary).toEqual(mockSummary);
+    expect(coachCall.exerciseProgressions).toEqual(mockProgressions);
+  });
+
+  it("passes null workoutSummary and exerciseProgressions for morning context", async () => {
+    prismaMock.userProfile.findUnique.mockResolvedValue(testProfile);
+    mockGetFitbitSleepData.mockResolvedValue({ summary: { totalMinutesAsleep: 420 } });
+    mockGetFitbitHeartRateData.mockResolvedValue({ restingHeartRate: 62 });
+    mockGetCoachInsight.mockResolvedValue(mockInsightResponse);
+
+    await request(app)
+      .post("/api/coach/insight")
+      .send({ context: "morning", date: "2026-03-22" });
+
+    const coachCall = mockGetCoachInsight.mock.calls[0][0];
+    expect(coachCall.workoutSummary).toBeNull();
+    expect(coachCall.exerciseProgressions).toBeNull();
+
+    // Training analysis functions should not be called for morning
+    expect(mockBuildWorkoutSummary).not.toHaveBeenCalled();
+    expect(mockBuildExerciseProgressions).not.toHaveBeenCalled();
+  });
+
+  it("includes trainingNote in response when present in insight", async () => {
+    prismaMock.userProfile.findUnique.mockResolvedValue(testProfile);
+    mockGetFitbitSleepData.mockResolvedValue({ summary: { totalMinutesAsleep: 420 } });
+    mockGetFitbitActivityData.mockResolvedValue({ steps: 8500, caloriesOut: 2100, workouts: [] });
+    mockGetFitbitHeartRateData.mockResolvedValue({ restingHeartRate: 62 });
+    mockBuildWorkoutSummary.mockReturnValue(null);
+    mockBuildExerciseProgressions.mockReturnValue([]);
+    mockGetCoachInsight.mockResolvedValue({
+      ...mockInsightResponse,
+      trainingNote: "Bench press reps trending up — consider adding 5lbs next session.",
+    });
+
+    const res = await request(app)
+      .post("/api/coach/insight")
+      .send({ context: "recap", date: "2026-03-22" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.trainingNote).toBe("Bench press reps trending up — consider adding 5lbs next session.");
+  });
+
+  it("excludes trainingNote from response when not in insight", async () => {
+    prismaMock.userProfile.findUnique.mockResolvedValue(testProfile);
+    mockGetFitbitSleepData.mockResolvedValue({ summary: { totalMinutesAsleep: 420 } });
+    mockGetFitbitActivityData.mockResolvedValue({ steps: 8500, caloriesOut: 2100, workouts: [] });
+    mockGetFitbitHeartRateData.mockResolvedValue({ restingHeartRate: 62 });
+    mockBuildWorkoutSummary.mockReturnValue(null);
+    mockBuildExerciseProgressions.mockReturnValue([]);
+    mockGetCoachInsight.mockResolvedValue(mockInsightResponse);
+
+    const res = await request(app)
+      .post("/api/coach/insight")
+      .send({ context: "recap", date: "2026-03-22" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.trainingNote).toBeUndefined();
   });
 });

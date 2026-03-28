@@ -7,6 +7,7 @@ import {
   getFitbitHeartRateData,
 } from "../lib/fitbit-api.js";
 import { getCoachInsight } from "../lib/coach.js";
+import { buildWorkoutSummary, buildExerciseProgressions } from "../lib/training-analysis.js";
 
 const router = Router();
 
@@ -116,7 +117,7 @@ router.post("/insight", authenticated, requireUser, async (req, res) => {
             where: {
               userId: req.user.id,
               date: {
-                gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+                gte: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
               },
             },
             include: { exercises: { orderBy: { position: "asc" } } },
@@ -137,6 +138,14 @@ router.post("/insight", authenticated, requireUser, async (req, res) => {
       ? { sleep: yesterdaySleep, heartRate: yesterdayHeartRate, activity: yesterdayActivity }
       : null;
 
+    // Compute derived workout analysis (pure functions, recap only)
+    const workoutSummary = context === "recap"
+      ? buildWorkoutSummary(activity, workoutLogs)
+      : null;
+    const exerciseProgressions = context === "recap"
+      ? buildExerciseProgressions(recentWorkouts)
+      : null;
+
     const insight = await getCoachInsight({
       context,
       date,
@@ -148,6 +157,8 @@ router.post("/insight", authenticated, requireUser, async (req, res) => {
       workoutLogs,
       recentWorkouts,
       yesterday,
+      workoutSummary,
+      exerciseProgressions,
     });
 
     const responseData = { ...insight, context, date };
