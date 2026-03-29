@@ -21,3 +21,11 @@ export async function getFitbitHeartRate(api, date) {
 export async function disconnectFitbit(api) {
   return api.delete("/api/fitbit/disconnect");
 }
+
+export async function getWeeklySummary(api, weekOf) {
+  return api.get(`/api/fitbit/weekly-summary?weekOf=${weekOf}`);
+}
+
+export async function getWeeklyInsight(api, weekOf) {
+  return api.post("/api/coach/weekly-insight", { weekOf });
+}
