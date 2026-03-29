@@ -5,8 +5,10 @@ import {
   getFitbitSleepData,
   getFitbitActivityData,
   getFitbitHeartRateData,
+  buildWeeklySummary,
+  getMonday,
 } from "../lib/fitbit-api.js";
-import { getCoachInsight } from "../lib/coach.js";
+import { getCoachInsight, getWeeklyInsight } from "../lib/coach.js";
 import { buildWorkoutSummary, buildExerciseProgressions } from "../lib/training-analysis.js";
 
 const router = Router();
@@ -176,6 +178,59 @@ router.post("/insight", authenticated, requireUser, async (req, res) => {
     }
     console.error("Coach insight error:", error);
     res.status(500).json({ error: "Failed to generate coaching insight" });
+  }
+});
+
+// POST /api/coach/weekly-insight — AI-generated weekly reflection (on demand)
+router.post("/weekly-insight", authenticated, requireUser, async (req, res) => {
+  const { weekOf } = req.body;
+
+  if (!weekOf || !/^\d{4}-\d{2}-\d{2}$/.test(weekOf)) {
+    return res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD" });
+  }
+
+  try {
+    const monday = getMonday(weekOf);
+
+    // Check cache
+    const cached = getCachedInsight(req.user.id, monday, "weekly");
+    if (cached) {
+      return res.json(cached);
+    }
+
+    // Compute Sunday from Monday
+    const sundayDate = new Date(monday + "T00:00:00Z");
+    sundayDate.setUTCDate(sundayDate.getUTCDate() + 6);
+    const sunday = `${sundayDate.getUTCFullYear()}-${String(sundayDate.getUTCMonth() + 1).padStart(2, "0")}-${String(sundayDate.getUTCDate()).padStart(2, "0")}`;
+
+    // Use the same shared helper as the GET /api/fitbit/weekly-summary route
+    const weeklySummary = await buildWeeklySummary(req.user.id, monday, sunday);
+
+    // Fetch user profile for goal-aware coaching
+    const profile = await prisma.userProfile.findUnique({
+      where: { userId: req.user.id },
+    });
+
+    const weeklyInsight = await getWeeklyInsight({
+      profile,
+      userName: req.user.name,
+      weeklySummary,
+    });
+
+    const responseData = { weeklyInsight };
+
+    setCachedInsight(req.user.id, monday, "weekly", responseData);
+
+    res.json(responseData);
+  } catch (error) {
+    if (error.message === "FITBIT_NOT_CONNECTED") {
+      return res.status(401).json({ error: "Fitbit not connected" });
+    }
+    if (error.message === "FITBIT_REAUTH_REQUIRED") {
+      return res.status(401).json({ error: "Fitbit re-authentication required" });
+    }
+    console.error("Weekly insight error:", error);
+    res.status(500).json({ error: "Failed to generate weekly insight" });
   }
 });
 

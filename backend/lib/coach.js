@@ -351,3 +351,78 @@ export async function getCoachInsight({ context, date, profile, sleep, activity,
     };
   }
 }
+
+// --- Weekly Insight (on-demand AI summary of the week) ---
+
+export function buildWeeklySystemPrompt(profile, userName) {
+  const name = userName || "there";
+  const goal = profile
+    ? GOAL_LABELS[profile.goal] || "improve their health"
+    : "improve their health";
+
+  return `You are a fitness coach writing a brief weekly summary for ${name}, whose goal is to ${goal}.
+
+Rules:
+- Output ONLY a plain text string (no JSON, no markdown, no code fences)
+- 1-4 sentences max
+- Sentence 1-2: What stood out this week — reference specific days, stats, or workouts from the data
+- Sentence 3-4: One focus or suggestion for next week
+- Must reference real numbers from the computed weekly stats (avgSteps, workoutCount, daysWithWorkouts, daysOver8kSteps, bestDay)
+- If mostRecentCompleteDay is provided, phrase as "Through [day]..." or "So far this week..." to acknowledge partial data
+- Never invent data not present in the summary
+- Tone: encouraging, direct, specific`;
+}
+
+export function buildWeeklyUserMessage(weeklySummary) {
+  const parts = [];
+  const { days, weeklyStats, hasPartialData, mostRecentCompleteDay } = weeklySummary;
+
+  if (hasPartialData && mostRecentCompleteDay) {
+    parts.push(`Weekly summary (through ${mostRecentCompleteDay}, today is partial):\n`);
+  } else {
+    parts.push(`Weekly summary (${weeklySummary.weekStart} to ${weeklySummary.weekEnd}):\n`);
+  }
+
+  for (const day of days) {
+    if (day.status === "future") continue;
+    const steps = day.steps !== null ? `${day.steps.toLocaleString()} steps` : "no data";
+    const cal = day.caloriesOut !== null ? `${day.caloriesOut.toLocaleString()} cal` : "no data";
+    const workouts = day.workouts.length > 0
+      ? day.workouts.map((w) => `${w.name} ${w.durationMin}min`).join(", ")
+      : "no workout";
+    const tag = day.status === "today" ? " (today, partial)" : "";
+    parts.push(`${day.dayOfWeek} ${day.date}: ${steps}, ${cal}, ${workouts}${tag}`);
+  }
+
+  parts.push("\nWeekly stats:");
+  parts.push(`- Total steps: ${weeklyStats.totalSteps.toLocaleString()}`);
+  parts.push(`- Avg steps/day: ${weeklyStats.avgSteps.toLocaleString()} (over ${weeklyStats.completedDays} days with data)`);
+  parts.push(`- Total calories: ${weeklyStats.totalCalories.toLocaleString()}`);
+  parts.push(`- Avg calories/day: ${weeklyStats.avgCalories.toLocaleString()}`);
+  parts.push(`- Total active minutes: ${weeklyStats.totalActiveMinutes}`);
+  parts.push(`- Workouts: ${weeklyStats.workoutCount} (across ${weeklyStats.daysWithWorkouts} days)`);
+  parts.push(`- Days over 8k steps: ${weeklyStats.daysOver8kSteps}`);
+  if (weeklyStats.bestDay) {
+    parts.push(`- Best day: ${weeklyStats.bestDay.dayOfWeek} ${weeklyStats.bestDay.date} — ${weeklyStats.bestDay.steps.toLocaleString()} steps`);
+  }
+
+  parts.push("\nSummarize what stood out this week in 1-2 sentences, then give one focus for next week in 1-2 sentences.");
+
+  return parts.join("\n");
+}
+
+export async function getWeeklyInsight({ profile, userName, weeklySummary }) {
+  const systemPrompt = buildWeeklySystemPrompt(profile, userName);
+  const userMessage = buildWeeklyUserMessage(weeklySummary);
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 200,
+    system: systemPrompt,
+    messages: [{ role: "user", content: userMessage }],
+  });
+
+  const raw = response.content[0].text.trim();
+  // Strip any accidental code fences
+  return raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+}

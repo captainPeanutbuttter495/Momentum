@@ -24,8 +24,10 @@ const mockGetFitbitSleepData = vi.hoisted(() => vi.fn());
 const mockGetFitbitActivityData = vi.hoisted(() => vi.fn());
 const mockGetFitbitHeartRateData = vi.hoisted(() => vi.fn());
 const mockGetCoachInsight = vi.hoisted(() => vi.fn());
+const mockGetWeeklyInsight = vi.hoisted(() => vi.fn());
 const mockBuildWorkoutSummary = vi.hoisted(() => vi.fn());
 const mockBuildExerciseProgressions = vi.hoisted(() => vi.fn());
+const mockBuildWeeklySummary = vi.hoisted(() => vi.fn());
 
 // Mock Prisma
 vi.mock("../db.js", () => ({ default: prismaMock }));
@@ -55,11 +57,20 @@ vi.mock("../lib/fitbit-api.js", () => ({
   getFitbitSleepData: mockGetFitbitSleepData,
   getFitbitActivityData: mockGetFitbitActivityData,
   getFitbitHeartRateData: mockGetFitbitHeartRateData,
+  buildWeeklySummary: mockBuildWeeklySummary,
+  getMonday: (dateStr) => {
+    const d = new Date(dateStr + "T00:00:00");
+    const day = d.getUTCDay();
+    const diff = day === 0 ? 6 : day - 1;
+    d.setUTCDate(d.getUTCDate() - diff);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  },
 }));
 
 // Mock coach.js
 vi.mock("../lib/coach.js", () => ({
   getCoachInsight: mockGetCoachInsight,
+  getWeeklyInsight: mockGetWeeklyInsight,
 }));
 
 // Mock training-analysis.js
@@ -431,5 +442,135 @@ describe("POST /api/coach/insight — training progression", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.trainingNote).toBeUndefined();
+  });
+});
+
+// ─── Weekly Insight ──────────────────────────────────────────────
+
+describe("POST /api/coach/weekly-insight", () => {
+  const mockWeeklySummary = {
+    weekStart: "2026-03-23",
+    weekEnd: "2026-03-29",
+    hasPartialData: true,
+    mostRecentCompleteDay: "2026-03-27",
+    days: [
+      { date: "2026-03-23", dayOfWeek: "Mon", status: "complete", steps: 9200, caloriesOut: 2100, activeMinutes: 35, workouts: [] },
+      { date: "2026-03-24", dayOfWeek: "Tue", status: "complete", steps: 11000, caloriesOut: 2400, activeMinutes: 50, workouts: [{ name: "Run", durationMin: 30, calories: 320 }] },
+      { date: "2026-03-25", dayOfWeek: "Wed", status: "complete", steps: 7500, caloriesOut: 1900, activeMinutes: 20, workouts: [] },
+      { date: "2026-03-26", dayOfWeek: "Thu", status: "complete", steps: 8100, caloriesOut: 2050, activeMinutes: 30, workouts: [] },
+      { date: "2026-03-27", dayOfWeek: "Fri", status: "complete", steps: 12400, caloriesOut: 2600, activeMinutes: 55, workouts: [{ name: "Weights", durationMin: 45, calories: 400 }] },
+      { date: "2026-03-28", dayOfWeek: "Sat", status: "today", steps: 3200, caloriesOut: 1100, activeMinutes: 10, workouts: [] },
+      { date: "2026-03-29", dayOfWeek: "Sun", status: "future", steps: null, caloriesOut: null, activeMinutes: null, workouts: [] },
+    ],
+    weeklyStats: {
+      totalSteps: 51400,
+      avgSteps: 8567,
+      totalCalories: 12150,
+      avgCalories: 2025,
+      totalActiveMinutes: 200,
+      workoutCount: 2,
+      daysWithWorkouts: 2,
+      daysOver8kSteps: 4,
+      completedDays: 6,
+      bestDay: { date: "2026-03-27", dayOfWeek: "Fri", steps: 12400 },
+    },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    insightCache.clear();
+    asUser();
+  });
+
+  it("returns weekly insight for a valid weekOf date", async () => {
+    mockBuildWeeklySummary.mockResolvedValue(mockWeeklySummary);
+    prismaMock.userProfile.findUnique.mockResolvedValue(testProfile);
+    mockGetWeeklyInsight.mockResolvedValue("Great week — you averaged 8.5k steps and hit 2 workouts.");
+
+    const res = await request(app)
+      .post("/api/coach/weekly-insight")
+      .send({ weekOf: "2026-03-28" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.weeklyInsight).toBe("Great week — you averaged 8.5k steps and hit 2 workouts.");
+    expect(mockBuildWeeklySummary).toHaveBeenCalledWith("user-123", "2026-03-23", "2026-03-29");
+    expect(mockGetWeeklyInsight).toHaveBeenCalledWith({
+      profile: testProfile,
+      userName: "Test User",
+      weeklySummary: mockWeeklySummary,
+    });
+  });
+
+  it("returns 400 for missing weekOf", async () => {
+    const res = await request(app)
+      .post("/api/coach/weekly-insight")
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid date format. Use YYYY-MM-DD");
+    expect(mockBuildWeeklySummary).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for invalid date format", async () => {
+    const res = await request(app)
+      .post("/api/coach/weekly-insight")
+      .send({ weekOf: "March 28" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid date format. Use YYYY-MM-DD");
+  });
+
+  it("returns 401 when Fitbit not connected", async () => {
+    mockBuildWeeklySummary.mockRejectedValue(new Error("FITBIT_NOT_CONNECTED"));
+
+    const res = await request(app)
+      .post("/api/coach/weekly-insight")
+      .send({ weekOf: "2026-03-28" });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe("Fitbit not connected");
+  });
+
+  it("returns 500 when Claude API fails", async () => {
+    mockBuildWeeklySummary.mockResolvedValue(mockWeeklySummary);
+    prismaMock.userProfile.findUnique.mockResolvedValue(testProfile);
+    mockGetWeeklyInsight.mockRejectedValue(new Error("Anthropic API error"));
+
+    const res = await request(app)
+      .post("/api/coach/weekly-insight")
+      .send({ weekOf: "2026-03-28" });
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe("Failed to generate weekly insight");
+  });
+
+  it("works without a user profile", async () => {
+    mockBuildWeeklySummary.mockResolvedValue(mockWeeklySummary);
+    prismaMock.userProfile.findUnique.mockResolvedValue(null);
+    mockGetWeeklyInsight.mockResolvedValue("Solid week overall.");
+
+    const res = await request(app)
+      .post("/api/coach/weekly-insight")
+      .send({ weekOf: "2026-03-28" });
+
+    expect(res.status).toBe(200);
+    expect(mockGetWeeklyInsight).toHaveBeenCalledWith({
+      profile: null,
+      userName: "Test User",
+      weeklySummary: mockWeeklySummary,
+    });
+  });
+
+  it("uses the same buildWeeklySummary shared helper as the fitbit route", async () => {
+    mockBuildWeeklySummary.mockResolvedValue(mockWeeklySummary);
+    prismaMock.userProfile.findUnique.mockResolvedValue(testProfile);
+    mockGetWeeklyInsight.mockResolvedValue("Nice consistency.");
+
+    await request(app)
+      .post("/api/coach/weekly-insight")
+      .send({ weekOf: "2026-03-25" });
+
+    // Wednesday 2026-03-25 maps to Monday 2026-03-23
+    expect(mockBuildWeeklySummary).toHaveBeenCalledWith("user-123", "2026-03-23", "2026-03-29");
   });
 });

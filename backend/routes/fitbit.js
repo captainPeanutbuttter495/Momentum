@@ -7,6 +7,9 @@ import {
   getFitbitSleepData,
   getFitbitActivityData,
   getFitbitHeartRateData,
+  buildWeeklySummary,
+  getMonday,
+  computeWeeklyEnrichments,
 } from "../lib/fitbit-api.js";
 
 const router = Router();
@@ -190,6 +193,95 @@ router.get("/activity/:date", authenticated, async (req, res) => {
         .json({ error: "Failed to fetch activity data from Fitbit" });
     }
     console.error("Activity data error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// In-memory cache for weekly summaries
+export const weeklySummaryCache = new Map();
+const WEEKLY_CACHE_TTL_CURRENT = 10 * 60 * 1000; // 10 minutes for current week
+const WEEKLY_CACHE_TTL_PAST = 60 * 60 * 1000; // 60 minutes for past weeks
+
+function cleanExpiredWeeklyCache() {
+  const now = Date.now();
+  for (const [key, entry] of weeklySummaryCache) {
+    if (now > entry.expiry) {
+      weeklySummaryCache.delete(key);
+    }
+  }
+}
+
+// GET /api/fitbit/weekly-summary — Fetch weekly activity summary (Mon-Sun)
+router.get("/weekly-summary", authenticated, async (req, res) => {
+  const weekOf = req.query.weekOf || new Date().toISOString().slice(0, 10);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekOf)) {
+    return res
+      .status(400)
+      .json({ error: "Invalid date format. Use YYYY-MM-DD" });
+  }
+
+  try {
+    const monday = getMonday(weekOf);
+    const sundayDate = new Date(monday + "T00:00:00Z");
+    sundayDate.setUTCDate(sundayDate.getUTCDate() + 6);
+    const sunday = `${sundayDate.getUTCFullYear()}-${String(sundayDate.getUTCMonth() + 1).padStart(2, "0")}-${String(sundayDate.getUTCDate()).padStart(2, "0")}`;
+
+    // Check cache
+    cleanExpiredWeeklyCache();
+    const cacheKey = `weekly:${req.user.id}:${monday}`;
+    const cached = weeklySummaryCache.get(cacheKey);
+    if (cached) {
+      return res.json(cached.data);
+    }
+
+    // Fetch current week and previous week in parallel
+    const prevMondayDate = new Date(monday + "T00:00:00Z");
+    prevMondayDate.setUTCDate(prevMondayDate.getUTCDate() - 7);
+    const prevMonday = `${prevMondayDate.getUTCFullYear()}-${String(prevMondayDate.getUTCMonth() + 1).padStart(2, "0")}-${String(prevMondayDate.getUTCDate()).padStart(2, "0")}`;
+    const prevSundayDate = new Date(prevMondayDate);
+    prevSundayDate.setUTCDate(prevSundayDate.getUTCDate() + 6);
+    const prevSunday = `${prevSundayDate.getUTCFullYear()}-${String(prevSundayDate.getUTCMonth() + 1).padStart(2, "0")}-${String(prevSundayDate.getUTCDate()).padStart(2, "0")}`;
+
+    const [summary, prevResult] = await Promise.all([
+      buildWeeklySummary(req.user.id, monday, sunday),
+      buildWeeklySummary(req.user.id, prevMonday, prevSunday).catch(() => null),
+    ]);
+
+    const previousWeekStats = prevResult ? prevResult.weeklyStats : null;
+    const enrichments = computeWeeklyEnrichments(
+      summary.days,
+      summary.weeklyStats,
+      previousWeekStats,
+    );
+
+    const enrichedSummary = { ...summary, ...enrichments };
+
+    // Cache with appropriate TTL
+    const ttl = summary.hasPartialData
+      ? WEEKLY_CACHE_TTL_CURRENT
+      : WEEKLY_CACHE_TTL_PAST;
+    weeklySummaryCache.set(cacheKey, {
+      data: enrichedSummary,
+      expiry: Date.now() + ttl,
+    });
+
+    res.json(enrichedSummary);
+  } catch (error) {
+    if (error.message === "FITBIT_NOT_CONNECTED") {
+      return res.status(401).json({ error: "Fitbit not connected" });
+    }
+    if (error.message === "FITBIT_REAUTH_REQUIRED") {
+      return res
+        .status(401)
+        .json({ error: "Fitbit re-authentication required" });
+    }
+    if (error.message === "FITBIT_API_ERROR") {
+      return res
+        .status(502)
+        .json({ error: "Failed to fetch weekly summary from Fitbit" });
+    }
+    console.error("Weekly summary error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });

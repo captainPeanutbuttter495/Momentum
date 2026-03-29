@@ -26,6 +26,8 @@ const mockExchangeCodeForTokens = vi.hoisted(() => vi.fn());
 const mockGetFitbitSleepData = vi.hoisted(() => vi.fn());
 const mockGetFitbitActivityData = vi.hoisted(() => vi.fn());
 const mockGetFitbitHeartRateData = vi.hoisted(() => vi.fn());
+const mockBuildWeeklySummary = vi.hoisted(() => vi.fn());
+const mockComputeWeeklyEnrichments = vi.hoisted(() => vi.fn());
 
 // Mock Prisma
 vi.mock("../db.js", () => ({ default: prismaMock }));
@@ -56,11 +58,21 @@ vi.mock("../lib/fitbit-api.js", () => ({
   getFitbitSleepData: mockGetFitbitSleepData,
   getFitbitActivityData: mockGetFitbitActivityData,
   getFitbitHeartRateData: mockGetFitbitHeartRateData,
+  buildWeeklySummary: mockBuildWeeklySummary,
+  getMonday: (dateStr) => {
+    const d = new Date(dateStr + "T00:00:00");
+    const day = d.getUTCDay();
+    const diff = day === 0 ? 6 : day - 1;
+    d.setUTCDate(d.getUTCDate() - diff);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  },
+  computeWeeklyEnrichments: mockComputeWeeklyEnrichments,
 }));
 
 // ─── Import app after mocks ────────────────────────────────────────
 
 const { default: app } = await import("../app.js");
+const { weeklySummaryCache } = await import("../routes/fitbit.js");
 
 // ─── Test Data ─────────────────────────────────────────────────────
 
@@ -101,6 +113,7 @@ function asUser() {
 describe("Fitbit Routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    weeklySummaryCache.clear();
     asUser();
   });
 
@@ -374,6 +387,129 @@ describe("Fitbit Routes", () => {
       const res = await request(app).get("/api/fitbit/heartrate/2026-03-16");
 
       expect(res.status).toBe(502);
+    });
+  });
+
+  // ── GET /api/fitbit/weekly-summary ───────────────────────────
+
+  describe("GET /api/fitbit/weekly-summary", () => {
+    const mockWeeklySummaryData = {
+      weekStart: "2026-03-23",
+      weekEnd: "2026-03-29",
+      hasPartialData: true,
+      mostRecentCompleteDay: "2026-03-27",
+      days: [
+        { date: "2026-03-23", dayOfWeek: "Mon", status: "complete", steps: 9200, caloriesOut: 2100, activeMinutes: 35, workouts: [] },
+        { date: "2026-03-24", dayOfWeek: "Tue", status: "complete", steps: 11000, caloriesOut: 2400, activeMinutes: 50, workouts: [{ name: "Run", durationMin: 30, calories: 320 }] },
+        { date: "2026-03-25", dayOfWeek: "Wed", status: "complete", steps: 7500, caloriesOut: 1900, activeMinutes: 20, workouts: [] },
+        { date: "2026-03-26", dayOfWeek: "Thu", status: "complete", steps: 8100, caloriesOut: 2050, activeMinutes: 30, workouts: [] },
+        { date: "2026-03-27", dayOfWeek: "Fri", status: "complete", steps: 12400, caloriesOut: 2600, activeMinutes: 55, workouts: [{ name: "Weights", durationMin: 45, calories: 400 }] },
+        { date: "2026-03-28", dayOfWeek: "Sat", status: "today", steps: 3200, caloriesOut: 1100, activeMinutes: 10, workouts: [] },
+        { date: "2026-03-29", dayOfWeek: "Sun", status: "future", steps: null, caloriesOut: null, activeMinutes: null, workouts: [] },
+      ],
+      weeklyStats: {
+        totalSteps: 51400,
+        avgSteps: 8567,
+        totalCalories: 12150,
+        avgCalories: 2025,
+        totalActiveMinutes: 200,
+        workoutCount: 2,
+        daysWithWorkouts: 2,
+        daysOver8kSteps: 4,
+        completedDays: 6,
+        bestDay: { date: "2026-03-27", dayOfWeek: "Fri", steps: 12400 },
+      },
+    };
+
+    const mockEnrichments = {
+      streaks: { stepStreak: 0, workoutStreak: 0 },
+      dayFlags: [[], [], [], [], [], [], []],
+      patterns: [],
+      comparison: null,
+    };
+
+    it("returns weekly summary with enrichments for a valid date", async () => {
+      mockBuildWeeklySummary.mockResolvedValue(mockWeeklySummaryData);
+      mockComputeWeeklyEnrichments.mockReturnValue(mockEnrichments);
+
+      const res = await request(app).get("/api/fitbit/weekly-summary?weekOf=2026-03-28");
+
+      expect(res.status).toBe(200);
+      expect(res.body.weekStart).toBe("2026-03-23");
+      expect(res.body.weekEnd).toBe("2026-03-29");
+      expect(res.body.days).toHaveLength(7);
+      expect(res.body.weeklyStats.avgSteps).toBe(8567);
+      expect(res.body.weeklyStats.daysWithWorkouts).toBe(2);
+      expect(res.body.weeklyStats.bestDay.steps).toBe(12400);
+      expect(res.body.streaks).toBeDefined();
+      expect(res.body.patterns).toBeDefined();
+      expect(mockBuildWeeklySummary).toHaveBeenCalledWith("user-123", "2026-03-23", "2026-03-29");
+    });
+
+    it("defaults to today when weekOf is omitted", async () => {
+      mockBuildWeeklySummary.mockResolvedValue(mockWeeklySummaryData);
+      mockComputeWeeklyEnrichments.mockReturnValue(mockEnrichments);
+
+      const res = await request(app).get("/api/fitbit/weekly-summary");
+
+      expect(res.status).toBe(200);
+      expect(mockBuildWeeklySummary).toHaveBeenCalled();
+    });
+
+    it("rejects invalid date format", async () => {
+      const res = await request(app).get("/api/fitbit/weekly-summary?weekOf=bad-date");
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Invalid date format. Use YYYY-MM-DD");
+      expect(mockBuildWeeklySummary).not.toHaveBeenCalled();
+    });
+
+    it("returns 401 when Fitbit not connected", async () => {
+      mockBuildWeeklySummary.mockRejectedValue(new Error("FITBIT_NOT_CONNECTED"));
+
+      const res = await request(app).get("/api/fitbit/weekly-summary?weekOf=2026-03-28");
+
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 502 on Fitbit API error", async () => {
+      mockBuildWeeklySummary.mockRejectedValue(new Error("FITBIT_API_ERROR"));
+
+      const res = await request(app).get("/api/fitbit/weekly-summary?weekOf=2026-03-28");
+
+      expect(res.status).toBe(502);
+    });
+
+    it("fetches previous week for comparison enrichments", async () => {
+      mockBuildWeeklySummary.mockResolvedValue(mockWeeklySummaryData);
+      mockComputeWeeklyEnrichments.mockReturnValue(mockEnrichments);
+
+      await request(app).get("/api/fitbit/weekly-summary?weekOf=2026-03-28");
+
+      // buildWeeklySummary called twice: current week + previous week
+      expect(mockBuildWeeklySummary).toHaveBeenCalledTimes(2);
+      expect(mockBuildWeeklySummary).toHaveBeenCalledWith("user-123", "2026-03-23", "2026-03-29");
+      expect(mockBuildWeeklySummary).toHaveBeenCalledWith("user-123", "2026-03-16", "2026-03-22");
+    });
+
+    it("still works when previous week fetch fails", async () => {
+      let callCount = 0;
+      mockBuildWeeklySummary.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve(mockWeeklySummaryData);
+        return Promise.reject(new Error("FITBIT_API_ERROR"));
+      });
+      mockComputeWeeklyEnrichments.mockReturnValue(mockEnrichments);
+
+      const res = await request(app).get("/api/fitbit/weekly-summary?weekOf=2026-03-28");
+
+      expect(res.status).toBe(200);
+      expect(res.body.weekStart).toBe("2026-03-23");
+      expect(mockComputeWeeklyEnrichments).toHaveBeenCalledWith(
+        mockWeeklySummaryData.days,
+        mockWeeklySummaryData.weeklyStats,
+        null,
+      );
     });
   });
 
