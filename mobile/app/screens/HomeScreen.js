@@ -5,6 +5,7 @@ import { useState } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import GradientBackground from "../../components/GradientBackground";
 import CoachCard from "../../components/CoachCard";
+import WeeklySummaryCard from "../../components/WeeklySummaryCard";
 import useCoachInsight from "../../hooks/useCoachInsight";
 
 export default function HomeScreen() {
@@ -92,7 +93,10 @@ export default function HomeScreen() {
         )}
 
         {!isLoading && !error && isConnected && insights && (
-          <CoachCard insights={insights} onRecap={fetchRecap} isRecapLoading={isRecapLoading} />
+          <>
+            <CoachCard insights={insights} onRecap={fetchRecap} isRecapLoading={isRecapLoading} />
+            <WeeklySummaryCard />
+          </>
         )}
 
         {!isLoading && !error && isConnected && !insights && (
