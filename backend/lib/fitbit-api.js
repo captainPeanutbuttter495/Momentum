@@ -111,6 +111,11 @@ export async function getFitbitSleepData(userId, date) {
     `https://api.fitbit.com/1.2/user/-/sleep/date/${date}.json`,
   );
 
+  // No sleep entries — Fitbit hasn't synced yet or no sleep logged for this date
+  if (!data.sleep || data.sleep.length === 0) {
+    return null;
+  }
+
   // Transform Fitbit response into a clean shape
   const summary = data.summary || {};
   const sleepLog = (data.sleep || []).map((entry) => ({
