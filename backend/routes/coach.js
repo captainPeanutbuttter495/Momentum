@@ -167,8 +167,14 @@ router.post("/insight", authenticated, requireUser, async (req, res) => {
 
     const responseData = { ...insight, context, date };
 
-    // Cache the response
-    setCachedInsight(req.user.id, date, context, responseData);
+    // Morning briefings with missing today sleep data should NOT be cached.
+    // Sleep data is time-sensitive — Fitbit may not have synced yet.
+    // Caching a missing-data briefing locks in a stale card until TTL expires.
+    // `sleep` here is the direct result of getFitbitSleepData(userId, date) for TODAY.
+    const isMissingSleep = context === "morning" && sleep === null;
+    if (!isMissingSleep) {
+      setCachedInsight(req.user.id, date, context, responseData);
+    }
 
     res.json(responseData);
   } catch (error) {
