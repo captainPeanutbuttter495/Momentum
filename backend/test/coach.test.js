@@ -361,6 +361,72 @@ describe("POST /api/coach/insight", () => {
     expect(coachCall.sleep).toEqual({ summary: { totalMinutesAsleep: 420 } });
     expect(coachCall.yesterday).toBeNull();
   });
+
+  // ─── Morning cache skip when today's sleep is missing ────────────
+
+  it("does not cache morning briefing when today's sleep is null, then caches once sleep arrives", async () => {
+    prismaMock.userProfile.findUnique.mockResolvedValue(testProfile);
+    mockGetFitbitHeartRateData.mockResolvedValue({ restingHeartRate: 62 });
+    mockGetFitbitActivityData.mockResolvedValue({ steps: 8500, caloriesOut: 2100 });
+
+    const sleepAvailableResponse = {
+      headline: "Marginal sleep — maintain only",
+      keySignals: ["6h10m sleep — marginal recovery"],
+      focus: ["Keep effort moderate today"],
+    };
+
+    // ── Request 1: today's sleep missing (null) ──
+    // First call (today) returns null, second call (yesterday) returns data
+    let sleepCallCount = 0;
+    mockGetFitbitSleepData.mockImplementation(() => {
+      sleepCallCount++;
+      if (sleepCallCount === 1) return Promise.resolve(null); // today — not synced
+      return Promise.resolve({ summary: { totalMinutesAsleep: 331 } }); // yesterday
+    });
+    mockGetCoachInsight.mockResolvedValue(mockInsightResponse);
+
+    const res1 = await request(app)
+      .post("/api/coach/insight")
+      .send({ context: "morning", date: "2026-03-22" });
+
+    expect(res1.status).toBe(200);
+    expect(mockGetCoachInsight).toHaveBeenCalledTimes(1);
+    // Cache should NOT be populated — today's sleep was missing
+    expect(insightCache.size).toBe(0);
+
+    // ── Request 2: sleep now available — should re-fetch, not serve stale cache ──
+    vi.clearAllMocks();
+    asUser();
+    prismaMock.userProfile.findUnique.mockResolvedValue(testProfile);
+    mockGetFitbitSleepData.mockResolvedValue({ summary: { totalMinutesAsleep: 370 } });
+    mockGetFitbitHeartRateData.mockResolvedValue({ restingHeartRate: 62 });
+    mockGetFitbitActivityData.mockResolvedValue({ steps: 8500, caloriesOut: 2100 });
+    mockGetCoachInsight.mockResolvedValue(sleepAvailableResponse);
+
+    const res2 = await request(app)
+      .post("/api/coach/insight")
+      .send({ context: "morning", date: "2026-03-22" });
+
+    expect(res2.status).toBe(200);
+    expect(res2.body.headline).toBe("Marginal sleep — maintain only");
+    // getCoachInsight called again — proves cache was empty
+    expect(mockGetCoachInsight).toHaveBeenCalledTimes(1);
+    // Cache should now be populated (valid sleep data present)
+    expect(insightCache.size).toBe(1);
+
+    // ── Request 3: same date/context — should be served from cache ──
+    vi.clearAllMocks();
+    asUser();
+
+    const res3 = await request(app)
+      .post("/api/coach/insight")
+      .send({ context: "morning", date: "2026-03-22" });
+
+    expect(res3.status).toBe(200);
+    expect(res3.body.headline).toBe("Marginal sleep — maintain only");
+    // getCoachInsight NOT called — served from cache
+    expect(mockGetCoachInsight).not.toHaveBeenCalled();
+  });
 });
 
 // ─── Training Progression ─────────────────────────────────────────
