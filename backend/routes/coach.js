@@ -82,11 +82,13 @@ router.post("/insight", authenticated, requireUser, async (req, res) => {
         getFitbitHeartRateData(req.user.id, date),
         getFitbitSleepData(req.user.id, yesterdayDate),
         getFitbitHeartRateData(req.user.id, yesterdayDate),
+        getFitbitActivityData(req.user.id, yesterdayDate),
       ]);
       sleep = results[0].status === "fulfilled" ? results[0].value : null;
       heartRate = results[1].status === "fulfilled" ? results[1].value : null;
       yesterdaySleep = results[2].status === "fulfilled" ? results[2].value : null;
       yesterdayHeartRate = results[3].status === "fulfilled" ? results[3].value : null;
+      yesterdayActivity = results[4].status === "fulfilled" ? results[4].value : null;
     } else {
       const results = await Promise.allSettled([
         getFitbitSleepData(req.user.id, date),

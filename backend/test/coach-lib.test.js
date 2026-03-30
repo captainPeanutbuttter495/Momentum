@@ -168,6 +168,49 @@ describe("buildUserMessage", () => {
     expect(msg).not.toContain("Yesterday active minutes");
   });
 
+  it("includes yesterday load summary for morning context", () => {
+    const yesterday = {
+      sleep: { summary: { totalMinutesAsleep: 360 }, sleepLog: [] },
+      heartRate: { restingHeartRate: 65 },
+      activity: { steps: 13600, activeMinutes: { fairlyActive: 120, veryActive: 107 }, workouts: [{ name: "Weights" }] },
+    };
+    const msg = buildUserMessage({ context: "morning", date: "2026-03-22", sleep: sleepData, heartRate: heartRateData, yesterday });
+    expect(msg).toContain("Yesterday load: high activity day");
+    expect(msg).toContain("Yesterday training: Weights");
+  });
+
+  it("classifies yesterday load as moderate when workouts present but low active minutes", () => {
+    const yesterday = {
+      sleep: null,
+      heartRate: null,
+      activity: { steps: 5000, activeMinutes: { fairlyActive: 10, veryActive: 5 }, workouts: [{ name: "Yoga" }] },
+    };
+    const msg = buildUserMessage({ context: "morning", date: "2026-03-22", sleep: sleepData, heartRate: heartRateData, yesterday });
+    expect(msg).toContain("Yesterday load: moderate activity day");
+    expect(msg).toContain("Yesterday training: Yoga");
+  });
+
+  it("classifies yesterday load as light when no workouts and low active minutes", () => {
+    const yesterday = {
+      sleep: null,
+      heartRate: null,
+      activity: { steps: 3000, activeMinutes: { fairlyActive: 5, veryActive: 2 }, workouts: [] },
+    };
+    const msg = buildUserMessage({ context: "morning", date: "2026-03-22", sleep: sleepData, heartRate: heartRateData, yesterday });
+    expect(msg).toContain("Yesterday load: light activity day");
+    expect(msg).not.toContain("Yesterday training:");
+  });
+
+  it("omits yesterday load for morning context when yesterday has no activity", () => {
+    const yesterday = {
+      sleep: { summary: { totalMinutesAsleep: 360 }, sleepLog: [] },
+      heartRate: { restingHeartRate: 65 },
+    };
+    const msg = buildUserMessage({ context: "morning", date: "2026-03-22", sleep: sleepData, heartRate: heartRateData, yesterday });
+    expect(msg).not.toContain("Yesterday load:");
+    expect(msg).not.toContain("Yesterday training:");
+  });
+
   it("omits yesterday section when yesterday is null", () => {
     const msg = buildUserMessage({ context: "morning", date: "2026-03-22", sleep: sleepData, heartRate: heartRateData, yesterday: null });
     expect(msg).not.toContain("Yesterday");
