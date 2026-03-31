@@ -843,6 +843,94 @@ describe("Workout Routes", () => {
     });
   });
 
+  // ─── GET /api/workouts/history/month ──────────────────────────────
+
+  describe("GET /api/workouts/history/month", () => {
+    it("returns workout logs for the requested month", async () => {
+      prismaMock.workoutLog.findMany.mockResolvedValue([storedLog]);
+
+      const res = await request(app)
+        .get("/api/workouts/history/month?month=2026-03")
+        .expect(200);
+
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0].id).toBe("log-1");
+
+      const call = prismaMock.workoutLog.findMany.mock.calls[0][0];
+      expect(call.where.userId).toBe("user-123");
+      expect(call.where.date).toEqual({ gte: "2026-03-01", lte: "2026-03-31" });
+      expect(call.include).toEqual({ exercises: { orderBy: { position: "asc" } } });
+      expect(call.orderBy).toEqual({ date: "desc" });
+    });
+
+    it("returns empty array when no logs exist for the month", async () => {
+      prismaMock.workoutLog.findMany.mockResolvedValue([]);
+
+      const res = await request(app)
+        .get("/api/workouts/history/month?month=2026-01")
+        .expect(200);
+
+      expect(res.body).toEqual([]);
+    });
+
+    it("returns 400 when month param is missing", async () => {
+      const res = await request(app)
+        .get("/api/workouts/history/month")
+        .expect(400);
+
+      expect(res.body.error).toBe("month query param required (YYYY-MM)");
+      expect(prismaMock.workoutLog.findMany).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 for invalid month format", async () => {
+      const res = await request(app)
+        .get("/api/workouts/history/month?month=2026-3")
+        .expect(400);
+
+      expect(res.body.error).toBe("month query param required (YYYY-MM)");
+      expect(prismaMock.workoutLog.findMany).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 for month 00", async () => {
+      const res = await request(app)
+        .get("/api/workouts/history/month?month=2026-00")
+        .expect(400);
+
+      expect(res.body.error).toBe("month must be between 01 and 12");
+      expect(prismaMock.workoutLog.findMany).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 for month 13", async () => {
+      const res = await request(app)
+        .get("/api/workouts/history/month?month=2026-13")
+        .expect(400);
+
+      expect(res.body.error).toBe("month must be between 01 and 12");
+      expect(prismaMock.workoutLog.findMany).not.toHaveBeenCalled();
+    });
+
+    it("correctly computes last day for February", async () => {
+      prismaMock.workoutLog.findMany.mockResolvedValue([]);
+
+      await request(app)
+        .get("/api/workouts/history/month?month=2026-02")
+        .expect(200);
+
+      const call = prismaMock.workoutLog.findMany.mock.calls[0][0];
+      expect(call.where.date).toEqual({ gte: "2026-02-01", lte: "2026-02-28" });
+    });
+
+    it("returns 500 on Prisma error", async () => {
+      prismaMock.workoutLog.findMany.mockRejectedValue(new Error("DB down"));
+
+      await request(app)
+        .get("/api/workouts/history/month?month=2026-03")
+        .expect(500);
+
+      expect(prismaMock.workoutLog.findMany).toHaveBeenCalled();
+    });
+  });
+
   // ─── POST /api/workouts/parse ─────────────────────────────────────
 
   describe("POST /api/workouts/parse", () => {
