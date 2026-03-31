@@ -29,3 +29,7 @@ export async function deleteWorkoutLog(api, id) {
 export async function parseWorkoutText(api, text) {
   return api.post("/api/workouts/parse", { text });
 }
+
+export async function getWorkoutHistory(api, month) {
+  return api.get(`/api/workouts/history/month?month=${month}`);
+}
