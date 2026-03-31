@@ -5,6 +5,7 @@ import { ActivityIndicator, View } from "react-native";
 
 import LoginScreen from "../screens/LoginScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+import WorkoutCalendarScreen from "../screens/WorkoutCalendarScreen";
 import OnboardingScreen from "../screens/OnboardingScreen";
 import MainTabNavigator from "./MainTabNavigator";
 import OnboardingContext from "../../context/OnboardingContext";
@@ -52,6 +53,7 @@ export default function AppNavigator() {
               <>
                 <Stack.Screen name="MainTabs" component={MainTabNavigator} />
                 <Stack.Screen name="Profile" component={ProfileScreen} />
+                <Stack.Screen name="WorkoutCalendar" component={WorkoutCalendarScreen} />
               </>
             )
           ) : (
