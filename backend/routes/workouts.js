@@ -321,6 +321,39 @@ router.get("/history", authenticated, requireUser, async (req, res) => {
   }
 });
 
+// GET /api/workouts/history/month?month=2026-03
+router.get("/history/month", authenticated, requireUser, async (req, res) => {
+  try {
+    const { month } = req.query;
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: "month query param required (YYYY-MM)" });
+    }
+    const monthInt = parseInt(month.split("-")[1], 10);
+    if (monthInt < 1 || monthInt > 12) {
+      return res.status(400).json({ error: "month must be between 01 and 12" });
+    }
+
+    const startDate = `${month}-01`;
+    const [yearStr, monthStr] = month.split("-");
+    const lastDay = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10), 0).getDate();
+    const endDate = `${month}-${String(lastDay).padStart(2, "0")}`;
+
+    const logs = await prisma.workoutLog.findMany({
+      where: {
+        userId: req.user.id,
+        date: { gte: startDate, lte: endDate },
+      },
+      include: { exercises: { orderBy: { position: "asc" } } },
+      orderBy: { date: "desc" },
+    });
+
+    res.json(logs);
+  } catch (error) {
+    console.error("Error fetching monthly workout history:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // POST /api/workouts/parse — standalone text parsing (no save)
 router.post("/parse", authenticated, requireUser, async (req, res) => {
   try {
