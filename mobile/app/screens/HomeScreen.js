@@ -140,6 +140,21 @@ export default function HomeScreen() {
             <View className="h-px bg-border mx-2" />
 
             <Pressable
+              onPress={() => {
+                setMenuOpen(false);
+                navigation.navigate("WorkoutCalendar");
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Workout Log Calendar"
+              className="flex-row items-center px-3 py-3 rounded-md"
+            >
+              <MaterialCommunityIcons name="calendar-month" size={20} color="#9BA3B5" />
+              <Text className="text-sm text-primary ml-3">Workout Calendar</Text>
+            </Pressable>
+
+            <View className="h-px bg-border mx-2" />
+
+            <Pressable
               onPress={handleLogout}
               accessibilityRole="button"
               accessibilityLabel="Log out"
